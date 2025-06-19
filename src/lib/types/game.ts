@@ -39,6 +39,10 @@ export type WinRecord = {
    */
   rowCount: RowCount;
   /**
+   * Risk level at the time of winning.
+   */
+  riskLevel: RiskLevel;
+  /**
    * Zero-based index of which bin the ball fell into (leftmost bin is 0).
    */
   binIndex: number;

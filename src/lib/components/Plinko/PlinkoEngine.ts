@@ -272,6 +272,7 @@ class PlinkoEngine {
           id: uuidv4(),
           betAmount,
           rowCount: this.rowCount,
+          riskLevel: this.riskLevel,
           binIndex,
           payout: {
             multiplier,
