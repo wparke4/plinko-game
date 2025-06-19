@@ -7,6 +7,7 @@ import {
   balance,
   betAmountOfExistingBalls,
   totalProfitHistory,
+  zeroedBins,
 } from '$lib/stores/game';
 import type { RiskLevel, RowCount } from '$lib/types';
 import { getRandomBetween } from '$lib/utils/numbers';
@@ -117,7 +118,10 @@ class PlinkoEngine {
     this.riskLevel = get(riskLevel);
     betAmount.subscribe((value) => (this.betAmount = value));
     rowCount.subscribe((value) => this.updateRowCount(value));
-    riskLevel.subscribe((value) => (this.riskLevel = value));
+    riskLevel.subscribe((value) => {
+      this.riskLevel = value;
+      zeroedBins.set(new Set()); // Reset zeroed bins when risk level changes
+    });
 
     this.engine = Matter.Engine.create({
       timing: {
@@ -244,6 +248,7 @@ class PlinkoEngine {
     }
 
     this.removeAllBalls();
+    zeroedBins.set(new Set()); // Reset zeroed bins when row count changes
 
     this.rowCount = rowCount;
     this.placePinsAndWalls();
@@ -256,7 +261,8 @@ class PlinkoEngine {
     const binIndex = this.pinsLastRowXCoords.findLastIndex((pinX) => pinX < ball.position.x);
     if (binIndex !== -1 && binIndex < this.pinsLastRowXCoords.length - 1) {
       const betAmount = get(betAmountOfExistingBalls)[ball.id] ?? 0;
-      const multiplier = binPayouts[this.rowCount][this.riskLevel][binIndex];
+      const zeroedBinsSet = get(zeroedBins);
+      const multiplier = zeroedBinsSet.has(binIndex) ? 0 : binPayouts[this.rowCount][this.riskLevel][binIndex];
       const payoutValue = betAmount * multiplier;
       const profit = payoutValue - betAmount;
 

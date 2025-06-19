@@ -1,6 +1,6 @@
 <script lang="ts">
   import { binColorsByRowCount, binPayouts } from '$lib/constants/game';
-  import { plinkoEngine, riskLevel, rowCount, winRecords } from '$lib/stores/game';
+  import { plinkoEngine, riskLevel, rowCount, winRecords, zeroedBins } from '$lib/stores/game';
   import { isAnimationOn } from '$lib/stores/settings';
   import type { Action } from 'svelte/action';
 
@@ -46,6 +46,30 @@
 
     animation.play();
   }
+
+  function handleBinClick(binIndex: number) {
+    $zeroedBins = new Set($zeroedBins);
+    if ($zeroedBins.has(binIndex)) {
+      $zeroedBins.delete(binIndex);
+    } else {
+      $zeroedBins.add(binIndex);
+    }
+  }
+
+  function getBinDisplayValue(binIndex: number): string {
+    if ($zeroedBins.has(binIndex)) {
+      return '0';
+    }
+    const payout = binPayouts[$rowCount][$riskLevel][binIndex];
+    return payout < 100 ? `${payout}×` : `${payout}`;
+  }
+
+  function getBinStyle(binIndex: number): string {
+    if ($zeroedBins.has(binIndex)) {
+      return 'background-color: rgb(255, 0, 0); --shadow-color: rgb(166, 0, 4);';
+    }
+    return `background-color: ${binColorsByRowCount[$rowCount].background[binIndex]}; --shadow-color: ${binColorsByRowCount[$rowCount].shadow[binIndex]};`;
+  }
 </script>
 
 <!-- Height clamping in mobile: From 10px at 370px viewport width to 16px at 600px viewport width -->
@@ -59,11 +83,19 @@
          -->
         <div
           use:initAnimation
-          class="flex min-w-0 flex-1 items-center justify-center rounded-xs text-[clamp(6px,2.784px+0.87vw,8px)] font-bold text-gray-950 shadow-[0_2px_var(--shadow-color)] lg:rounded-md lg:text-[clamp(10px,-16.944px+2.632vw,12px)] lg:shadow-[0_3px_var(--shadow-color)]"
-          style:background-color={binColorsByRowCount[$rowCount].background[binIndex]}
-          style:--shadow-color={binColorsByRowCount[$rowCount].shadow[binIndex]}
+          role="button"
+          tabindex="0"
+          onclick={() => handleBinClick(binIndex)}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleBinClick(binIndex);
+            }
+          }}
+          class="flex min-w-0 flex-1 cursor-pointer items-center justify-center rounded-xs text-[clamp(6px,2.784px+0.87vw,8px)] font-bold text-gray-950 shadow-[0_2px_var(--shadow-color)] transition-all hover:opacity-80 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 lg:rounded-md lg:text-[clamp(10px,-16.944px+2.632vw,12px)] lg:shadow-[0_3px_var(--shadow-color)]"
+          style={getBinStyle(binIndex)}
         >
-          {payout}{payout < 100 ? '×' : ''}
+          {getBinDisplayValue(binIndex)}
         </div>
       {/each}
     </div>

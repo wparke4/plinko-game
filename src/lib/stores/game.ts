@@ -23,6 +23,12 @@ export const riskLevel = writable<RiskLevel>(RiskLevel.MEDIUM);
 export const winRecords = writable<WinRecord[]>([]);
 
 /**
+ * Set of bin indices that are set to 0x multiplier.
+ * Players can click on bins to toggle them to 0x.
+ */
+export const zeroedBins = writable<Set<number>>(new Set());
+
+/**
  * History of total profits. Should be updated whenever a new win record is pushed
  * to `winRecords` store.
  *
