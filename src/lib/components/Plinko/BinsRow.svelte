@@ -79,8 +79,7 @@
     if ($zeroedBins.has(binIndex)) {
       return 'background-color: rgb(0, 0, 0); color: rgb(255, 255, 255); --shadow-color: rgb(32, 32, 32);';
     }
-    const isAdjusted = $adjustedMultipliers[binIndex] > binPayouts[$rowCount][$riskLevel][binIndex];
-    return `background-color: ${binColorsByRowCount[$rowCount].background[binIndex]}; --shadow-color: ${binColorsByRowCount[$rowCount].shadow[binIndex]}; ${isAdjusted ? 'color: rgb(0, 255, 0);' : ''}`;
+    return `background-color: ${binColorsByRowCount[$rowCount].background[binIndex]}; --shadow-color: ${binColorsByRowCount[$rowCount].shadow[binIndex]};`;
   }
 </script>
 
