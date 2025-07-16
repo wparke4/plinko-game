@@ -56,6 +56,25 @@
     }
   }
 
+  function formatLargeNumber(num: number): string {
+    if (num < 1000) {
+      return num.toString();
+    }
+    
+    const inThousands = num / 1000;
+    
+    // Determine decimal places based on number of digits before decimal
+    const digitsBeforeDecimal = Math.floor(inThousands).toString().length;
+    const maxDecimalPlaces = digitsBeforeDecimal >= 3 ? 1 : 2;
+    
+    // Convert to string with max decimal places, then remove trailing zeros
+    let formatted = inThousands.toFixed(maxDecimalPlaces);
+    // Remove trailing zeros after decimal point
+    formatted = formatted.replace(/\.?0+$/, '');
+    
+    return `${formatted}K`;
+  }
+
   function getBinDisplayValue(binIndex: number): string {
     if ($zeroedBins.has(binIndex)) {
       return '💀';
@@ -63,16 +82,20 @@
     const adjustedPayout = $adjustedMultipliers[binIndex];
     const originalPayout = binPayouts[$rowCount][$riskLevel][binIndex];
     
-    // Count decimal places in original payout
-    const originalString = originalPayout.toString();
-    const decimalPlaces = originalString.includes('.') ? 
-      originalString.split('.')[1].length : 
-      0;
+    // Count decimal places in original payout for small numbers
+    if (originalPayout < 100) {
+      const originalString = originalPayout.toString();
+      const decimalPlaces = originalString.includes('.') ? 
+        originalString.split('.')[1].length : 
+        0;
+      // Remove trailing zeros from small numbers too
+      let formattedPayout = adjustedPayout.toFixed(decimalPlaces);
+      formattedPayout = formattedPayout.replace(/\.?0+$/, '');
+      return `${formattedPayout}×`;
+    }
     
-    // Format adjusted payout with same precision
-    const formattedPayout = adjustedPayout.toFixed(decimalPlaces);
-    
-    return parseFloat(formattedPayout) < 100 ? `${formattedPayout}×` : formattedPayout;
+    // For large numbers, use K formatting
+    return `${formatLargeNumber(adjustedPayout)}`;
   }
 
   function getBinStyle(binIndex: number): string {
@@ -89,8 +112,8 @@
     <div class="flex gap-[1%]" style:width={`${($plinkoEngine.binsWidthPercentage ?? 0) * 100}%`}>
       {#each $adjustedMultipliers as payout, binIndex}
         <!-- Font-size clamping:
-              - Mobile (< 1024px): From 6px at 370px viewport width to 8px at 600px viewport width
-              - Desktop (>= 1024px): From 10px at 1024px viewport width to 12px at 1100px viewport width
+              - Mobile (< 1024px): From 5px at 370px viewport width to 7px at 600px viewport width
+              - Desktop (>= 1024px): From 9px at 1024px viewport width to 11px at 1100px viewport width
          -->
         <div
           use:initAnimation
@@ -103,7 +126,7 @@
               handleBinClick(binIndex);
             }
           }}
-          class="flex min-w-0 flex-1 cursor-pointer items-center justify-center rounded-xs text-[clamp(6px,2.784px+0.87vw,8px)] font-bold text-gray-950 shadow-[0_2px_var(--shadow-color)] transition-all hover:opacity-80 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 lg:rounded-md lg:text-[clamp(10px,-16.944px+2.632vw,12px)] lg:shadow-[0_3px_var(--shadow-color)]"
+          class="flex min-w-0 flex-1 cursor-pointer items-center justify-center rounded-xs text-[clamp(5px,2.784px+0.87vw,7px)] font-bold text-gray-950 shadow-[0_2px_var(--shadow-color)] transition-all hover:opacity-80 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 lg:rounded-md lg:text-[clamp(9px,-16.944px+2.632vw,11px)] lg:shadow-[0_3px_var(--shadow-color)]"
           style={getBinStyle(binIndex)}
         >
           {getBinDisplayValue(binIndex)}
