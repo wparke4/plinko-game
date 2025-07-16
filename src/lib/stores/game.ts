@@ -1,5 +1,5 @@
 import PlinkoEngine from '$lib/components/Plinko/PlinkoEngine';
-import { binColor, DEFAULT_BALANCE } from '$lib/constants/game';
+import { binColor, DEFAULT_BALANCE, binPayouts, binProbabilitiesByRowCount } from '$lib/constants/game';
 import {
   RiskLevel,
   type BetAmountOfExistingBalls,
@@ -85,3 +85,69 @@ export const binProbabilities = derived<
   }
   return probabilities;
 });
+
+/**
+ * Recalculates multipliers to maintain RTP when bins are zeroed
+ */
+function recalculateMultipliers(rowCount: RowCount, riskLevel: RiskLevel, zeroedBinsSet: Set<number>): number[] {
+  const originalMultipliers = binPayouts[rowCount][riskLevel];
+  const probabilities = binProbabilitiesByRowCount[rowCount];
+  
+  // If no bins are zeroed, return original multipliers
+  if (zeroedBinsSet.size === 0) {
+    return originalMultipliers;
+  }
+
+  // Calculate original RTP
+  const originalRTP = probabilities.reduce((sum, prob, i) => 
+    sum + prob * originalMultipliers[i], 0);
+
+  // Calculate lost expected value from zeroed bins
+  const lostEV = Array.from(zeroedBinsSet).reduce((sum, binIndex) => 
+    sum + probabilities[binIndex] * originalMultipliers[binIndex], 0);
+
+  // Calculate sum of (probability × multiplier) for non-zeroed bins
+  const activeMultiplierSum = originalMultipliers.reduce((sum, mult, i) => 
+    zeroedBinsSet.has(i) ? sum : sum + mult * probabilities[i], 0);
+
+  // Calculate scaling factor
+  const scalingFactor = originalRTP / activeMultiplierSum;
+
+  // Log debug information
+  console.log('Multiplier Adjustment Debug:', {
+    rowCount,
+    riskLevel,
+    zeroedBins: Array.from(zeroedBinsSet),
+    originalRTP,
+    lostEV,
+    activeMultiplierSum,
+    scalingFactor
+  });
+
+  // Return new multipliers with proportional scaling
+  const adjustedMultipliers = originalMultipliers.map((mult, i) => {
+    if (zeroedBinsSet.has(i)) {
+      return 0;
+    }
+    return mult * scalingFactor;
+  });
+
+  // Log multiplier changes
+  console.log('Multiplier Changes:', originalMultipliers.map((orig, i) => ({
+    binIndex: i,
+    original: orig,
+    adjusted: adjustedMultipliers[i],
+    difference: adjustedMultipliers[i] - orig,
+    percentageIncrease: ((adjustedMultipliers[i] - orig) / orig * 100).toFixed(2) + '%'
+  })));
+
+  return adjustedMultipliers;
+}
+
+/**
+ * Store containing the current adjusted multipliers, accounting for zeroed bins
+ */
+export const adjustedMultipliers = derived(
+  [rowCount, riskLevel, zeroedBins],
+  ([$rowCount, $riskLevel, $zeroedBins]) => recalculateMultipliers($rowCount, $riskLevel, $zeroedBins)
+);

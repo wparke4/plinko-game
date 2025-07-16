@@ -1,6 +1,6 @@
 <script lang="ts">
   import { binColorsByRowCount, binPayouts } from '$lib/constants/game';
-  import { plinkoEngine, riskLevel, rowCount, winRecords, zeroedBins } from '$lib/stores/game';
+  import { plinkoEngine, riskLevel, rowCount, winRecords, zeroedBins, adjustedMultipliers } from '$lib/stores/game';
   import { isAnimationOn } from '$lib/stores/settings';
   import type { Action } from 'svelte/action';
 
@@ -60,15 +60,27 @@
     if ($zeroedBins.has(binIndex)) {
       return '💀';
     }
-    const payout = binPayouts[$rowCount][$riskLevel][binIndex];
-    return payout < 100 ? `${payout}×` : `${payout}`;
+    const adjustedPayout = $adjustedMultipliers[binIndex];
+    const originalPayout = binPayouts[$rowCount][$riskLevel][binIndex];
+    
+    // Count decimal places in original payout
+    const originalString = originalPayout.toString();
+    const decimalPlaces = originalString.includes('.') ? 
+      originalString.split('.')[1].length : 
+      0;
+    
+    // Format adjusted payout with same precision
+    const formattedPayout = adjustedPayout.toFixed(decimalPlaces);
+    
+    return parseFloat(formattedPayout) < 100 ? `${formattedPayout}×` : formattedPayout;
   }
 
   function getBinStyle(binIndex: number): string {
     if ($zeroedBins.has(binIndex)) {
       return 'background-color: rgb(0, 0, 0); color: rgb(255, 255, 255); --shadow-color: rgb(32, 32, 32);';
     }
-    return `background-color: ${binColorsByRowCount[$rowCount].background[binIndex]}; --shadow-color: ${binColorsByRowCount[$rowCount].shadow[binIndex]};`;
+    const isAdjusted = $adjustedMultipliers[binIndex] > binPayouts[$rowCount][$riskLevel][binIndex];
+    return `background-color: ${binColorsByRowCount[$rowCount].background[binIndex]}; --shadow-color: ${binColorsByRowCount[$rowCount].shadow[binIndex]}; ${isAdjusted ? 'color: rgb(0, 255, 0);' : ''}`;
   }
 </script>
 
@@ -76,7 +88,7 @@
 <div class="flex h-[clamp(10px,0.352px+2.609vw,16px)] w-full justify-center lg:h-7">
   {#if $plinkoEngine}
     <div class="flex gap-[1%]" style:width={`${($plinkoEngine.binsWidthPercentage ?? 0) * 100}%`}>
-      {#each binPayouts[$rowCount][$riskLevel] as payout, binIndex}
+      {#each $adjustedMultipliers as payout, binIndex}
         <!-- Font-size clamping:
               - Mobile (< 1024px): From 6px at 370px viewport width to 8px at 600px viewport width
               - Desktop (>= 1024px): From 10px at 1024px viewport width to 12px at 1100px viewport width

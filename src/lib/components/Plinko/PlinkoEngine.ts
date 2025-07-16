@@ -8,6 +8,7 @@ import {
   betAmountOfExistingBalls,
   totalProfitHistory,
   zeroedBins,
+  adjustedMultipliers
 } from '$lib/stores/game';
 import type { RiskLevel, RowCount } from '$lib/types';
 import { getRandomBetween } from '$lib/utils/numbers';
@@ -261,8 +262,7 @@ class PlinkoEngine {
     const binIndex = this.pinsLastRowXCoords.findLastIndex((pinX) => pinX < ball.position.x);
     if (binIndex !== -1 && binIndex < this.pinsLastRowXCoords.length - 1) {
       const betAmount = get(betAmountOfExistingBalls)[ball.id] ?? 0;
-      const zeroedBinsSet = get(zeroedBins);
-      const multiplier = zeroedBinsSet.has(binIndex) ? 0 : binPayouts[this.rowCount][this.riskLevel][binIndex];
+      const multiplier = get(adjustedMultipliers)[binIndex];
       const payoutValue = betAmount * multiplier;
       const profit = payoutValue - betAmount;
 
