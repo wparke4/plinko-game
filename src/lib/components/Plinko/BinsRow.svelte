@@ -58,7 +58,8 @@
 
   function formatLargeNumber(num: number): string {
     if (num < 1000) {
-      return num.toString();
+      // For numbers under 1000, limit to 4 significant digits total
+      return Number(num.toPrecision(4)).toString();
     }
     
     const inThousands = num / 1000;
@@ -67,8 +68,14 @@
     const digitsBeforeDecimal = Math.floor(inThousands).toString().length;
     const maxDecimalPlaces = digitsBeforeDecimal >= 3 ? 1 : 2;
     
-    // Convert to string with max decimal places, then remove trailing zeros
-    let formatted = inThousands.toFixed(maxDecimalPlaces);
+    // First convert to fixed decimal places
+    let formatted = Number(inThousands.toFixed(maxDecimalPlaces)).toString();
+    
+    // If still too many digits, use toPrecision to limit significant digits
+    if (formatted.replace('.', '').length > 4) {
+      formatted = Number(inThousands.toPrecision(4)).toString();
+    }
+    
     // Remove trailing zeros after decimal point
     formatted = formatted.replace(/\.?0+$/, '');
     
@@ -82,20 +89,17 @@
     const adjustedPayout = $adjustedMultipliers[binIndex];
     const originalPayout = binPayouts[$rowCount][$riskLevel][binIndex];
     
-    // Count decimal places in original payout for small numbers
+    // For small numbers (< 100)
     if (originalPayout < 100) {
-      const originalString = originalPayout.toString();
-      const decimalPlaces = originalString.includes('.') ? 
-        originalString.split('.')[1].length : 
-        0;
-      // Remove trailing zeros from small numbers too
-      let formattedPayout = adjustedPayout.toFixed(decimalPlaces);
+      // Limit to 3 significant digits for small numbers
+      let formattedPayout = Number(adjustedPayout.toPrecision(3)).toString();
+      // Remove trailing zeros
       formattedPayout = formattedPayout.replace(/\.?0+$/, '');
-      return `${formattedPayout}×`;
+      return formattedPayout;
     }
     
     // For large numbers, use K formatting
-    return `${formatLargeNumber(adjustedPayout)}`;
+    return formatLargeNumber(adjustedPayout);
   }
 
   function getBinStyle(binIndex: number): string {
