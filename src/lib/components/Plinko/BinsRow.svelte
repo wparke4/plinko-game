@@ -58,7 +58,7 @@
 
   function getBinDisplayValue(binIndex: number): string {
     if ($zeroedBins.has(binIndex)) {
-      return '0';
+      return '💀';
     }
     const payout = binPayouts[$rowCount][$riskLevel][binIndex];
     return payout < 100 ? `${payout}×` : `${payout}`;
@@ -66,7 +66,7 @@
 
   function getBinStyle(binIndex: number): string {
     if ($zeroedBins.has(binIndex)) {
-      return 'background-color: rgb(255, 0, 0); --shadow-color: rgb(166, 0, 4);';
+      return 'background-color: rgb(0, 0, 0); color: rgb(255, 255, 255); --shadow-color: rgb(32, 32, 32);';
     }
     return `background-color: ${binColorsByRowCount[$rowCount].background[binIndex]}; --shadow-color: ${binColorsByRowCount[$rowCount].shadow[binIndex]};`;
   }
