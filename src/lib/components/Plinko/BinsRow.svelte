@@ -58,22 +58,25 @@
 
   function formatLargeNumber(num: number): string {
     if (num < 1000) {
-      // For numbers under 1000, limit to 4 significant digits total
-      return Number(num.toPrecision(4)).toString();
+      // For numbers under 1000, limit to 3 significant digits
+      return Number(num.toPrecision(3)).toString();
     }
     
     const inThousands = num / 1000;
     
     // Determine decimal places based on number of digits before decimal
     const digitsBeforeDecimal = Math.floor(inThousands).toString().length;
-    const maxDecimalPlaces = digitsBeforeDecimal >= 3 ? 1 : 2;
+    
+    // If number is 10K or more, reduce decimal places to keep total digits at 3
+    const maxDecimalPlaces = digitsBeforeDecimal >= 2 ? 0 : 
+                           digitsBeforeDecimal === 1 ? 1 : 2;
     
     // First convert to fixed decimal places
     let formatted = Number(inThousands.toFixed(maxDecimalPlaces)).toString();
     
-    // If still too many digits, use toPrecision to limit significant digits
-    if (formatted.replace('.', '').length > 4) {
-      formatted = Number(inThousands.toPrecision(4)).toString();
+    // If still too many digits, use toPrecision to force 3 digits
+    if (formatted.replace('.', '').length > 3) {
+      formatted = Number(inThousands.toPrecision(3)).toString();
     }
     
     // Remove trailing zeros after decimal point
