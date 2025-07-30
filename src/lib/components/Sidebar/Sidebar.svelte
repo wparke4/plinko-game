@@ -19,6 +19,8 @@
   import Question from 'phosphor-svelte/lib/Question';
   import type { FormEventHandler } from 'svelte/elements';
   import { twMerge } from 'tailwind-merge';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
 
   let betMode: BetMode = $state(BetMode.MANUAL);
 
@@ -118,9 +120,35 @@
     { value: RiskLevel.HIGH, label: 'High' },
   ];
   const rowCounts = rowCountOptions.map((value) => ({ value, label: value.toString() }));
+
+  const gameTypes = [
+    { value: '/', label: 'Classic Plinko' },
+    { value: '/crash', label: 'Plinko Crash' }
+  ];
+
+  function handleGameChange(path: string) {
+    goto(path);
+  }
 </script>
 
 <div class="flex flex-col gap-5 bg-slate-700 p-3 lg:max-w-80">
+  <div>
+    <label for="gameType" class="text-sm font-medium text-slate-300">Game Type</label>
+    <div class="flex gap-1 rounded-full bg-slate-900 p-1">
+      {#each gameTypes as { value, label }}
+        <button
+          onclick={() => handleGameChange(value)}
+          class={twMerge(
+            'flex-1 rounded-full py-2 text-sm font-medium text-white transition hover:bg-slate-600 active:bg-slate-500',
+            $page.url.pathname === value && 'bg-slate-600'
+          )}
+        >
+          {label}
+        </button>
+      {/each}
+    </div>
+  </div>
+
   <div class="flex gap-1 rounded-full bg-slate-900 p-1">
     {#each betModes as { value, label }}
       <button

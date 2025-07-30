@@ -1,4 +1,5 @@
-import PlinkoEngine from '$lib/components/Plinko/PlinkoEngine';
+import ClassicPlinkoEngine from '$lib/components/Plinko/PlinkoEngine';
+import CrashPlinkoEngine from '$lib/components/PlinkoCrash/PlinkoEngine';
 import { binColor, DEFAULT_BALANCE, binPayouts, binProbabilitiesByRowCount } from '$lib/constants/game';
 import {
   RiskLevel,
@@ -9,6 +10,9 @@ import {
 import { interpolateRgbColors } from '$lib/utils/colors';
 import { countValueOccurrences } from '$lib/utils/numbers';
 import { derived, writable } from 'svelte/store';
+
+// Create a union type for both engine types
+type PlinkoEngine = ClassicPlinkoEngine | CrashPlinkoEngine;
 
 export const plinkoEngine = writable<PlinkoEngine | null>(null);
 
