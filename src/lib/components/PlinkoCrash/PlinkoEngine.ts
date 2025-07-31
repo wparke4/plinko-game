@@ -40,7 +40,13 @@ export default class PlinkoEngine {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.engine = Matter.Engine.create();
+    this.engine = Matter.Engine.create({
+      gravity: {
+        x: 0,
+        y: 0.6, // Reduced from 0.8 to slow down vertical acceleration
+        scale: 0.001
+      }
+    });
     this.render = Matter.Render.create({
       canvas: this.canvas,
       engine: this.engine,
@@ -114,6 +120,8 @@ export default class PlinkoEngine {
         const colX = rowPaddingX + ((this.canvas.width - rowPaddingX * 2) / (pinCount - 1)) * col;
         const pin = Matter.Bodies.circle(colX, rowY, PlinkoEngine.PEG_RADIUS, {
           isStatic: true,
+          restitution: 0.8 + (Math.random() - 0.5) * 0.1, // Add slight randomness to pin bounciness
+          friction: 0.3 + (Math.random() - 0.5) * 0.1, // Add slight randomness to pin friction
           render: {
             fillStyle: '#ffffff',
           },
@@ -157,7 +165,7 @@ export default class PlinkoEngine {
     this.rowPinPositions.clear();
   }
 
-  private createRowOfPins(rowY: number, pinCount: number, isOffset: boolean = false) {
+    private createRowOfPins(rowY: number, pinCount: number, isOffset: boolean = false) {
     const { PADDING_X, PIN_CATEGORY, BALL_CATEGORY } = PlinkoEngine;
     const rowPins: Matter.Body[] = [];
     
@@ -294,9 +302,9 @@ export default class PlinkoEngine {
       PlinkoEngine.BALL_RADIUS,
       PlinkoEngine.BALL_RADIUS,
       {
-        restitution: 0.8,
-        friction: 0.5,
-        frictionAir: 0.038,
+        restitution: 0.85, // Slightly increased bounciness for more chaotic movement
+        friction: 0.4, // Reduced surface friction
+        frictionAir: 0.008, // Significantly reduced air friction (was 0.038)
         density: 1,
         collisionFilter: {
           category: PlinkoEngine.BALL_CATEGORY,
@@ -308,9 +316,9 @@ export default class PlinkoEngine {
       }
     );
 
-    // Add random initial velocity
+    // Add random initial velocity with increased horizontal range
     const randomVelocity = {
-      x: (Math.random() - 0.5) * 2,  // Random value between -1 and 1
+      x: (Math.random() - 0.5) * 6,  // Increased from 2 to 6 for more horizontal momentum
       y: 0
     };
     Matter.Body.setVelocity(ball, randomVelocity);
