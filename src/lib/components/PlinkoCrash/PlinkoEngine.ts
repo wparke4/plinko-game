@@ -22,6 +22,12 @@ export default class PlinkoEngine {
   private pins: Matter.Body[] = [];
   private walls: Matter.Body[] = [];
   private pinsLastRowXCoords: number[] = [];
+  
+  // Camera tracking properties
+  private cameraY: number = 0;
+  private trackedBall: Matter.Body | null = null;
+  private isCameraTracking: boolean = false;
+  private readonly CAMERA_MIDPOINT = PlinkoEngine.HEIGHT / 2;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -34,6 +40,8 @@ export default class PlinkoEngine {
         height: PlinkoEngine.HEIGHT,
         wireframes: false,
         background: 'transparent',
+        // Enable bounds debugging to see the viewport
+        hasBounds: true,
       },
     });
 
@@ -43,6 +51,11 @@ export default class PlinkoEngine {
 
     // Create runner
     this.runner = Matter.Runner.create();
+
+    // Setup camera update
+    Matter.Events.on(this.engine, 'afterUpdate', () => {
+      this.updateCamera();
+    });
   }
 
   private get pinDistanceX(): number {
@@ -52,7 +65,7 @@ export default class PlinkoEngine {
 
   private setupWorld() {
     const walls = [
-      Matter.Bodies.rectangle(PlinkoEngine.WIDTH / 2, PlinkoEngine.HEIGHT + 50, PlinkoEngine.WIDTH, 100, { isStatic: true }), // Bottom
+      // Remove bottom wall to allow infinite falling
       Matter.Bodies.rectangle(-50, PlinkoEngine.HEIGHT / 2, 100, PlinkoEngine.HEIGHT, { isStatic: true }), // Left
       Matter.Bodies.rectangle(PlinkoEngine.WIDTH + 50, PlinkoEngine.HEIGHT / 2, 100, PlinkoEngine.HEIGHT, { isStatic: true }), // Right
     ];
@@ -151,6 +164,41 @@ export default class PlinkoEngine {
     Matter.Engine.clear(this.engine);
   }
 
+  private updateCamera() {
+    if (!this.trackedBall || !this.isCameraTracking) return;
+
+    // Get the ball's vertical position
+    const ballY = this.trackedBall.position.y;
+
+    // Calculate the desired camera position to keep the ball centered
+    // Remove the max(0, ...) to allow negative values for infinite downward scrolling
+    const targetCameraY = ballY - this.CAMERA_MIDPOINT;
+
+    // Update camera position with smooth interpolation
+    this.cameraY += (targetCameraY - this.cameraY) * 0.1;
+
+    // Update the render offset - allow infinite downward scrolling
+    Matter.Render.lookAt(this.render, {
+      min: { x: 0, y: this.cameraY },
+      max: { x: PlinkoEngine.WIDTH, y: this.cameraY + PlinkoEngine.HEIGHT }
+    });
+
+    // Log camera position for debugging
+    console.log('Camera Update:', {
+      ballY,
+      targetCameraY,
+      cameraY: this.cameraY,
+      isTracking: this.isCameraTracking
+    });
+
+    // Check if ball has fallen too far (optional cleanup)
+    if (ballY > 10000) { // Arbitrary large number
+      Matter.Composite.remove(this.engine.world, this.trackedBall);
+      this.trackedBall = null;
+      this.isCameraTracking = false;
+    }
+  }
+
   dropBall() {
     const currentBetAmount = get(betAmount);
     const currentBalance = get(balance);
@@ -185,6 +233,11 @@ export default class PlinkoEngine {
     // Add ball to world
     Matter.Composite.add(this.engine.world, ball);
 
+    // Set this as the tracked ball and reset camera
+    this.trackedBall = ball;
+    this.cameraY = 0;
+    this.isCameraTracking = false;
+
     // Track ball and its bet amount
     this.activeBalls.set(ball, currentBetAmount);
     betAmountOfExistingBalls.update((balls) => ({
@@ -192,15 +245,26 @@ export default class PlinkoEngine {
       [ball.id]: currentBetAmount,
     }));
 
-    // Setup collision handling
-    Matter.Events.on(this.engine, 'collisionStart', (event) => {
-      event.pairs.forEach((pair) => {
-        const { bodyA, bodyB } = pair;
-        if (bodyA === ball || bodyB === ball) {
-          // Handle collision logic for crash variant
-          // This is where you'd implement the specific crash game mechanics
+    // Setup ball position monitoring
+    Matter.Events.on(this.engine, 'afterUpdate', () => {
+      if (this.trackedBall === ball) {
+        // Start camera tracking when ball passes midpoint
+        if (!this.isCameraTracking && ball.position.y > this.CAMERA_MIDPOINT) {
+          console.log('Starting camera tracking', {
+            ballY: ball.position.y,
+            midpoint: this.CAMERA_MIDPOINT
+          });
+          this.isCameraTracking = true;
         }
-      });
+      }
+    });
+
+    // Check if ball is removed
+    Matter.Events.on(this.engine, 'afterUpdate', () => {
+      if (this.trackedBall === ball && !this.engine.world.bodies.includes(ball)) {
+        this.trackedBall = null;
+        this.isCameraTracking = false;
+      }
     });
   }
 }
