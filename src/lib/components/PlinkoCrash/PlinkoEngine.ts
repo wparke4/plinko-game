@@ -34,6 +34,7 @@ export default class PlinkoEngine {
   
   // Camera tracking properties
   private cameraY: number = 0;
+  private highestCameraY: number = 0; // Track the highest (smallest) Y position
   private trackedBall: Matter.Body | null = null;
   private isCameraTracking: boolean = false;
   private readonly CAMERA_MIDPOINT = PlinkoEngine.HEIGHT / 2;
@@ -227,8 +228,15 @@ export default class PlinkoEngine {
     // Calculate the desired camera position to keep the ball centered
     const targetCameraY = ballY - this.CAMERA_MIDPOINT;
 
-    // Update camera position with smooth interpolation
-    this.cameraY += (targetCameraY - this.cameraY) * 0.1;
+    // Update camera position with smooth interpolation, but never go above highestCameraY
+    const newCameraY = Math.max(
+      this.highestCameraY,
+      this.cameraY + (targetCameraY - this.cameraY) * 0.1
+    );
+    
+    // Update both camera position and highest point
+    this.cameraY = newCameraY;
+    this.highestCameraY = newCameraY;
 
     // Update the render offset - allow infinite downward scrolling
     Matter.Render.lookAt(this.render, {
@@ -329,6 +337,7 @@ export default class PlinkoEngine {
     // Set this as the tracked ball and reset camera
     this.trackedBall = ball;
     this.cameraY = 0;
+    this.highestCameraY = 0; // Reset highest camera position for new ball
     this.isCameraTracking = false;
 
     // Track ball and its bet amount
