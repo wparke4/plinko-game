@@ -13,6 +13,7 @@ export default class PlinkoEngine {
   static readonly INITIAL_ROW_COUNT = 11; // Initial rows for triangle pattern
   static readonly PIN_CATEGORY = 0x0001;
   static readonly BALL_CATEGORY = 0x0002;
+  static readonly WALL_CATEGORY = 0x0004;  // New category for walls
   static readonly ROW_HEIGHT = 50; // Height between rows
   static readonly VIEWPORT_BUFFER = 2; // Number of screen heights to keep pins loaded above and below viewport
 
@@ -204,6 +205,10 @@ export default class PlinkoEngine {
         isStatic: true,
         angle: leftWallAngle,
         render: { visible: false },
+        collisionFilter: {
+          category: PlinkoEngine.WALL_CATEGORY,
+          mask: PlinkoEngine.BALL_CATEGORY
+        }
       },
     );
     const rightWall = Matter.Bodies.rectangle(
@@ -215,6 +220,10 @@ export default class PlinkoEngine {
         isStatic: true,
         angle: -leftWallAngle,
         render: { visible: false },
+        collisionFilter: {
+          category: PlinkoEngine.WALL_CATEGORY,
+          mask: PlinkoEngine.BALL_CATEGORY
+        }
       },
     );
     this.walls.push(leftWall, rightWall);
@@ -335,13 +344,20 @@ export default class PlinkoEngine {
         density: 1,
         collisionFilter: {
           category: PlinkoEngine.BALL_CATEGORY,
-          mask: PlinkoEngine.PIN_CATEGORY,
+          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY,  // Update mask to include walls
         },
         render: {
           fillStyle: '#ff0000',
         },
       }
     );
+
+    // Add random initial velocity
+    const randomVelocity = {
+      x: (Math.random() - 0.5) * 2,  // Random value between -1 and 1
+      y: 0
+    };
+    Matter.Body.setVelocity(ball, randomVelocity);
 
     // Add ball to world
     Matter.Composite.add(this.engine.world, ball);
