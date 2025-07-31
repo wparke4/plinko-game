@@ -10,9 +10,11 @@ export default class PlinkoEngine {
   static readonly PADDING_X = 52;
   static readonly PADDING_TOP = 36;
   static readonly PADDING_BOTTOM = 28;
-  static readonly ROW_COUNT = 11; // Fixed number of rows for crash variant
+  static readonly INITIAL_ROW_COUNT = 11; // Initial rows for triangle pattern
   static readonly PIN_CATEGORY = 0x0001;
   static readonly BALL_CATEGORY = 0x0002;
+  static readonly ROW_HEIGHT = 50; // Height between rows
+  static readonly VIEWPORT_BUFFER = 2; // Number of screen heights to keep pins loaded above and below viewport
 
   private engine: Matter.Engine;
   private render: Matter.Render;
@@ -22,6 +24,12 @@ export default class PlinkoEngine {
   private pins: Matter.Body[] = [];
   private walls: Matter.Body[] = [];
   private pinsLastRowXCoords: number[] = [];
+  
+  // Dynamic row management
+  private lastGeneratedRowY: number = 0;
+  private firstVisibleRowY: number = 0;
+  private lastRowPinCount: number = 0;
+  private rowPinPositions: Map<number, Matter.Body[]> = new Map(); // Y position to pins mapping
   
   // Camera tracking properties
   private cameraY: number = 0;
@@ -59,7 +67,7 @@ export default class PlinkoEngine {
   }
 
   private get pinDistanceX(): number {
-    const lastRowPinCount = 3 + PlinkoEngine.ROW_COUNT - 1;
+    const lastRowPinCount = 3 + PlinkoEngine.INITIAL_ROW_COUNT - 1;
     return (this.canvas.width - PlinkoEngine.PADDING_X * 2) / (lastRowPinCount - 1);
   }
 
@@ -74,9 +82,56 @@ export default class PlinkoEngine {
   }
 
   private placePinsAndWalls() {
-    const { PADDING_X, PADDING_TOP, PADDING_BOTTOM, PIN_CATEGORY, BALL_CATEGORY, ROW_COUNT } = PlinkoEngine;
+    const { PADDING_X, PADDING_TOP, PADDING_BOTTOM, PIN_CATEGORY, BALL_CATEGORY, INITIAL_ROW_COUNT } = PlinkoEngine;
 
     // Clear existing pins and walls if any
+    this.clearExistingPins();
+
+    // Place initial triangle pattern exactly as before
+    for (let row = 0; row < INITIAL_ROW_COUNT; ++row) {
+      const rowY =
+        PADDING_TOP +
+        ((this.canvas.height - PADDING_TOP - PADDING_BOTTOM) / (INITIAL_ROW_COUNT - 1)) * row;
+
+      const rowPaddingX = PADDING_X + ((INITIAL_ROW_COUNT - 1 - row) * this.pinDistanceX) / 2;
+      const pinCount = 3 + row;
+      const rowPins: Matter.Body[] = [];
+
+      for (let col = 0; col < pinCount; ++col) {
+        const colX = rowPaddingX + ((this.canvas.width - rowPaddingX * 2) / (pinCount - 1)) * col;
+        const pin = Matter.Bodies.circle(colX, rowY, PlinkoEngine.PEG_RADIUS, {
+          isStatic: true,
+          render: {
+            fillStyle: '#ffffff',
+          },
+          collisionFilter: {
+            category: PIN_CATEGORY,
+            mask: BALL_CATEGORY,
+          },
+        });
+        
+        this.pins.push(pin);
+        rowPins.push(pin);
+        
+        if (row === INITIAL_ROW_COUNT - 1) {
+          this.pinsLastRowXCoords.push(colX);
+          this.lastRowPinCount = pinCount;
+        }
+      }
+      
+      this.rowPinPositions.set(rowY, rowPins);
+      Matter.Composite.add(this.engine.world, rowPins);
+    }
+
+    // Set the last generated row position
+    this.lastGeneratedRowY = PADDING_TOP + ((this.canvas.height - PADDING_TOP - PADDING_BOTTOM) / (INITIAL_ROW_COUNT - 1)) * (INITIAL_ROW_COUNT - 1);
+    this.firstVisibleRowY = PADDING_TOP;
+
+    // Add slanted walls to guide balls
+    this.createGuideWalls();
+  }
+
+  private clearExistingPins() {
     if (this.pins.length > 0) {
       Matter.Composite.remove(this.engine.world, this.pins);
       this.pins = [];
@@ -88,41 +143,53 @@ export default class PlinkoEngine {
       Matter.Composite.remove(this.engine.world, this.walls);
       this.walls = [];
     }
+    this.rowPinPositions.clear();
+  }
 
-    // Place pins in a triangle pattern
-    for (let row = 0; row < ROW_COUNT; ++row) {
-      const rowY =
-        PADDING_TOP +
-        ((this.canvas.height - PADDING_TOP - PADDING_BOTTOM) / (ROW_COUNT - 1)) * row;
-
-      const rowPaddingX = PADDING_X + ((ROW_COUNT - 1 - row) * this.pinDistanceX) / 2;
-
-      for (let col = 0; col < 3 + row; ++col) {
-        const colX = rowPaddingX + ((this.canvas.width - rowPaddingX * 2) / (3 + row - 1)) * col;
-        const pin = Matter.Bodies.circle(colX, rowY, PlinkoEngine.PEG_RADIUS, {
-          isStatic: true,
-          render: {
-            fillStyle: '#ffffff',
-          },
-          collisionFilter: {
-            category: PIN_CATEGORY,
-            mask: BALL_CATEGORY,
-          },
-        });
-        this.pins.push(pin);
-
-        if (row === ROW_COUNT - 1) {
-          this.pinsLastRowXCoords.push(colX);
-        }
+  private createRowOfPins(rowY: number, pinCount: number, isOffset: boolean = false) {
+    const { PADDING_X, PIN_CATEGORY, BALL_CATEGORY } = PlinkoEngine;
+    const rowPins: Matter.Body[] = [];
+    
+    // Calculate the base X positions
+    const pinSpacing = (this.canvas.width - PADDING_X * 2) / (pinCount - 1);
+    
+    for (let col = 0; col < pinCount; ++col) {
+      let colX = PADDING_X + (pinSpacing * col);
+      
+      // Apply offset for alternating rows
+      if (isOffset) {
+        colX += pinSpacing / 2;
       }
-    }
-    Matter.Composite.add(this.engine.world, this.pins);
+      
+      // Skip first and last pins on offset rows to maintain wall alignment
+      if (isOffset && (col === 0 || col === pinCount - 1)) {
+        continue;
+      }
 
-    // Add slanted walls to guide balls
+      const pin = Matter.Bodies.circle(colX, rowY, PlinkoEngine.PEG_RADIUS, {
+        isStatic: true,
+        render: {
+          fillStyle: '#ffffff',
+        },
+        collisionFilter: {
+          category: PIN_CATEGORY,
+          mask: BALL_CATEGORY,
+        },
+      });
+      
+      this.pins.push(pin);
+      rowPins.push(pin);
+    }
+    
+    this.rowPinPositions.set(rowY, rowPins);
+    Matter.Composite.add(this.engine.world, rowPins);
+  }
+
+  private createGuideWalls() {
     const firstPinX = this.pins[0].position.x;
     const leftWallAngle = Math.atan2(
       firstPinX - this.pinsLastRowXCoords[0],
-      this.canvas.height - PADDING_TOP - PADDING_BOTTOM,
+      this.canvas.height - PlinkoEngine.PADDING_TOP - PlinkoEngine.PADDING_BOTTOM,
     );
     const leftWallX =
       firstPinX - (firstPinX - this.pinsLastRowXCoords[0]) / 2 - this.pinDistanceX * 0.25;
@@ -171,7 +238,6 @@ export default class PlinkoEngine {
     const ballY = this.trackedBall.position.y;
 
     // Calculate the desired camera position to keep the ball centered
-    // Remove the max(0, ...) to allow negative values for infinite downward scrolling
     const targetCameraY = ballY - this.CAMERA_MIDPOINT;
 
     // Update camera position with smooth interpolation
@@ -183,19 +249,52 @@ export default class PlinkoEngine {
       max: { x: PlinkoEngine.WIDTH, y: this.cameraY + PlinkoEngine.HEIGHT }
     });
 
-    // Log camera position for debugging
-    console.log('Camera Update:', {
-      ballY,
-      targetCameraY,
-      cameraY: this.cameraY,
-      isTracking: this.isCameraTracking
-    });
+    // Generate new rows and clean up old ones
+    this.manageDynamicRows();
 
     // Check if ball has fallen too far (optional cleanup)
     if (ballY > 10000) { // Arbitrary large number
       Matter.Composite.remove(this.engine.world, this.trackedBall);
       this.trackedBall = null;
       this.isCameraTracking = false;
+    }
+  }
+
+  private manageDynamicRows() {
+    const { ROW_HEIGHT, HEIGHT, VIEWPORT_BUFFER } = PlinkoEngine;
+    
+    // Calculate viewport boundaries with buffer
+    const viewportTop = this.cameraY - (HEIGHT * VIEWPORT_BUFFER);
+    const viewportBottom = this.cameraY + HEIGHT + (HEIGHT * VIEWPORT_BUFFER);
+    
+    // Generate new rows below
+    while (this.lastGeneratedRowY < viewportBottom) {
+      this.lastGeneratedRowY += ROW_HEIGHT;
+      
+      // Determine if this row should be offset based on its position
+      const rowIndex = Math.floor((this.lastGeneratedRowY - this.firstVisibleRowY) / ROW_HEIGHT);
+      const isOffset = rowIndex % 2 === 1;
+      
+      this.createRowOfPins(this.lastGeneratedRowY, this.lastRowPinCount, isOffset);
+    }
+    
+    // Remove rows that are too far above viewport
+    for (const [rowY, rowPins] of this.rowPinPositions.entries()) {
+      if (rowY < viewportTop) {
+        Matter.Composite.remove(this.engine.world, rowPins);
+        this.pins = this.pins.filter(pin => !rowPins.includes(pin));
+        this.rowPinPositions.delete(rowY);
+        this.firstVisibleRowY = Math.min(...this.rowPinPositions.keys());
+      }
+    }
+    
+    // Remove rows that are too far below viewport
+    for (const [rowY, rowPins] of this.rowPinPositions.entries()) {
+      if (rowY > viewportBottom) {
+        Matter.Composite.remove(this.engine.world, rowPins);
+        this.pins = this.pins.filter(pin => !rowPins.includes(pin));
+        this.rowPinPositions.delete(rowY);
+      }
     }
   }
 
