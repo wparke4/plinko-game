@@ -123,8 +123,9 @@ export default class PlinkoEngine {
       Matter.Composite.add(this.engine.world, rowPins);
     }
 
-    // Set the last generated row position
-    this.lastGeneratedRowY = PADDING_TOP + ((this.canvas.height - PADDING_TOP - PADDING_BOTTOM) / (INITIAL_ROW_COUNT - 1)) * (INITIAL_ROW_COUNT - 1);
+    // Set the last generated row position to the last row of the initial triangle
+    const lastInitialRowY = PADDING_TOP + ((this.canvas.height - PADDING_TOP - PADDING_BOTTOM) / (INITIAL_ROW_COUNT - 1)) * (INITIAL_ROW_COUNT - 1);
+    this.lastGeneratedRowY = lastInitialRowY;
     this.firstVisibleRowY = PADDING_TOP;
 
     // Add slanted walls to guide balls
@@ -266,16 +267,25 @@ export default class PlinkoEngine {
     // Calculate viewport boundaries with buffer
     const viewportTop = this.cameraY - (HEIGHT * VIEWPORT_BUFFER);
     const viewportBottom = this.cameraY + HEIGHT + (HEIGHT * VIEWPORT_BUFFER);
-    
-    // Generate new rows below
-    while (this.lastGeneratedRowY < viewportBottom) {
-      this.lastGeneratedRowY += ROW_HEIGHT;
+
+    // Only generate new rows if we're below the initial triangle pattern
+    if (this.cameraY > this.lastGeneratedRowY - HEIGHT) {
+      // Calculate the next row position based on ROW_HEIGHT, starting from the last generated row
+      let nextRowY = this.lastGeneratedRowY + ROW_HEIGHT;
       
-      // Determine if this row should be offset based on its position
-      const rowIndex = Math.floor((this.lastGeneratedRowY - this.firstVisibleRowY) / ROW_HEIGHT);
-      const isOffset = rowIndex % 2 === 1;
-      
-      this.createRowOfPins(this.lastGeneratedRowY, this.lastRowPinCount, isOffset);
+      // Generate rows to fill the viewport
+      while (nextRowY <= viewportBottom) {
+        // Skip if row already exists
+        if (!this.rowPinPositions.has(nextRowY)) {
+          // Determine if this row should be offset
+          const rowIndex = Math.floor((nextRowY - this.firstVisibleRowY) / ROW_HEIGHT);
+          const isOffset = rowIndex % 2 === 1;
+          
+          this.createRowOfPins(nextRowY, this.lastRowPinCount, isOffset);
+        }
+        nextRowY += ROW_HEIGHT;
+      }
+      this.lastGeneratedRowY = Math.max(this.lastGeneratedRowY, nextRowY - ROW_HEIGHT);
     }
     
     // Remove rows that are too far above viewport
@@ -284,7 +294,11 @@ export default class PlinkoEngine {
         Matter.Composite.remove(this.engine.world, rowPins);
         this.pins = this.pins.filter(pin => !rowPins.includes(pin));
         this.rowPinPositions.delete(rowY);
-        this.firstVisibleRowY = Math.min(...this.rowPinPositions.keys());
+        
+        // Update firstVisibleRowY only if we have remaining rows
+        if (this.rowPinPositions.size > 0) {
+          this.firstVisibleRowY = Math.min(...this.rowPinPositions.keys());
+        }
       }
     }
     
