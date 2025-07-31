@@ -16,6 +16,7 @@ export default class PlinkoEngine {
   static readonly WALL_CATEGORY = 0x0004;  // New category for walls
   static readonly ROW_HEIGHT = 50; // Height between rows
   static readonly VIEWPORT_BUFFER = 2; // Number of screen heights to keep pins loaded above and below viewport
+  static readonly TERMINAL_VELOCITY = 4; // Maximum fall speed for balls
 
   private engine: Matter.Engine;
   private render: Matter.Render;
@@ -68,9 +69,10 @@ export default class PlinkoEngine {
     // Create runner
     this.runner = Matter.Runner.create();
 
-    // Setup camera update
+    // Setup camera update and velocity limiting
     Matter.Events.on(this.engine, 'afterUpdate', () => {
       this.updateCamera();
+      this.limitBallVelocities();
     });
   }
 
@@ -368,5 +370,24 @@ export default class PlinkoEngine {
         this.isCameraTracking = false;
       }
     });
+  }
+
+  private limitBallVelocities() {
+    const bodies = Matter.Composite.allBodies(this.engine.world);
+    for (const body of bodies) {
+      // Only limit ball velocities
+      if (body.collisionFilter.category === PlinkoEngine.BALL_CATEGORY) {
+        const velocity = body.velocity;
+        
+        // Limit vertical velocity to terminal velocity
+        if (Math.abs(velocity.y) > PlinkoEngine.TERMINAL_VELOCITY) {
+          const sign = velocity.y > 0 ? 1 : -1;
+          Matter.Body.setVelocity(body, {
+            x: velocity.x,
+            y: sign * PlinkoEngine.TERMINAL_VELOCITY
+          });
+        }
+      }
+    }
   }
 }
