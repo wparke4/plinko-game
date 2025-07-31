@@ -74,12 +74,24 @@ export default class PlinkoEngine {
 
   private setupWorld() {
     const walls = [
-      // Remove bottom wall to allow infinite falling
-      Matter.Bodies.rectangle(-50, PlinkoEngine.HEIGHT / 2, 100, PlinkoEngine.HEIGHT, { isStatic: true }), // Left
-      Matter.Bodies.rectangle(PlinkoEngine.WIDTH + 50, PlinkoEngine.HEIGHT / 2, 100, PlinkoEngine.HEIGHT, { isStatic: true }), // Right
+      Matter.Bodies.rectangle(-50, PlinkoEngine.HEIGHT / 2, 100, PlinkoEngine.HEIGHT, { 
+        isStatic: true,
+        collisionFilter: {
+          category: PlinkoEngine.WALL_CATEGORY,
+          mask: PlinkoEngine.BALL_CATEGORY
+        }
+      }), // Left
+      Matter.Bodies.rectangle(PlinkoEngine.WIDTH + 50, PlinkoEngine.HEIGHT / 2, 100, PlinkoEngine.HEIGHT, { 
+        isStatic: true,
+        collisionFilter: {
+          category: PlinkoEngine.WALL_CATEGORY,
+          mask: PlinkoEngine.BALL_CATEGORY
+        }
+      }), // Right
     ];
 
     Matter.Composite.add(this.engine.world, walls);
+    this.walls = walls;  // Store walls reference
   }
 
   private placePinsAndWalls() {
@@ -128,9 +140,6 @@ export default class PlinkoEngine {
     const lastInitialRowY = PADDING_TOP + ((this.canvas.height - PADDING_TOP - PADDING_BOTTOM) / (INITIAL_ROW_COUNT - 1)) * (INITIAL_ROW_COUNT - 1);
     this.lastGeneratedRowY = lastInitialRowY;
     this.firstVisibleRowY = PADDING_TOP;
-
-    // Add slanted walls to guide balls
-    this.createGuideWalls();
   }
 
   private clearExistingPins() {
@@ -152,10 +161,13 @@ export default class PlinkoEngine {
     const { PADDING_X, PIN_CATEGORY, BALL_CATEGORY } = PlinkoEngine;
     const rowPins: Matter.Body[] = [];
     
-    // Calculate the base X positions
-    const pinSpacing = (this.canvas.width - PADDING_X * 2) / (pinCount - 1);
+    // Calculate the base X positions - use the same spacing as the initial triangle
+    const pinSpacing = (this.canvas.width - PADDING_X * 2) / (this.lastRowPinCount - 1);
     
-    for (let col = 0; col < pinCount; ++col) {
+    // Calculate how many pins we need for consistent density
+    const effectivePinCount = this.lastRowPinCount;
+    
+    for (let col = 0; col < effectivePinCount; ++col) {
       let colX = PADDING_X + (pinSpacing * col);
       
       // Apply offset for alternating rows
@@ -163,8 +175,8 @@ export default class PlinkoEngine {
         colX += pinSpacing / 2;
       }
       
-      // Skip first and last pins on offset rows to maintain wall alignment
-      if (isOffset && (col === 0 || col === pinCount - 1)) {
+      // Skip first and last pins on offset rows to maintain consistent pattern
+      if (isOffset && (col === 0 || col === effectivePinCount - 1)) {
         continue;
       }
 
@@ -185,49 +197,6 @@ export default class PlinkoEngine {
     
     this.rowPinPositions.set(rowY, rowPins);
     Matter.Composite.add(this.engine.world, rowPins);
-  }
-
-  private createGuideWalls() {
-    const firstPinX = this.pins[0].position.x;
-    const leftWallAngle = Math.atan2(
-      firstPinX - this.pinsLastRowXCoords[0],
-      this.canvas.height - PlinkoEngine.PADDING_TOP - PlinkoEngine.PADDING_BOTTOM,
-    );
-    const leftWallX =
-      firstPinX - (firstPinX - this.pinsLastRowXCoords[0]) / 2 - this.pinDistanceX * 0.25;
-
-    const leftWall = Matter.Bodies.rectangle(
-      leftWallX,
-      this.canvas.height / 2,
-      10,
-      this.canvas.height,
-      {
-        isStatic: true,
-        angle: leftWallAngle,
-        render: { visible: false },
-        collisionFilter: {
-          category: PlinkoEngine.WALL_CATEGORY,
-          mask: PlinkoEngine.BALL_CATEGORY
-        }
-      },
-    );
-    const rightWall = Matter.Bodies.rectangle(
-      this.canvas.width - leftWallX,
-      this.canvas.height / 2,
-      10,
-      this.canvas.height,
-      {
-        isStatic: true,
-        angle: -leftWallAngle,
-        render: { visible: false },
-        collisionFilter: {
-          category: PlinkoEngine.WALL_CATEGORY,
-          mask: PlinkoEngine.BALL_CATEGORY
-        }
-      },
-    );
-    this.walls.push(leftWall, rightWall);
-    Matter.Composite.add(this.engine.world, this.walls);
   }
 
   start() {
@@ -277,19 +246,16 @@ export default class PlinkoEngine {
     const viewportTop = this.cameraY - (HEIGHT * VIEWPORT_BUFFER);
     const viewportBottom = this.cameraY + HEIGHT + (HEIGHT * VIEWPORT_BUFFER);
 
-    // Only generate new rows if we're below the initial triangle pattern
+    // Generate new rows if needed
     if (this.cameraY > this.lastGeneratedRowY - HEIGHT) {
-      // Calculate the next row position based on ROW_HEIGHT, starting from the last generated row
       let nextRowY = this.lastGeneratedRowY + ROW_HEIGHT;
       
-      // Generate rows to fill the viewport
       while (nextRowY <= viewportBottom) {
-        // Skip if row already exists
         if (!this.rowPinPositions.has(nextRowY)) {
-          // Determine if this row should be offset
           const rowIndex = Math.floor((nextRowY - this.firstVisibleRowY) / ROW_HEIGHT);
           const isOffset = rowIndex % 2 === 1;
           
+          // Use the same pin count as the last row of the initial triangle
           this.createRowOfPins(nextRowY, this.lastRowPinCount, isOffset);
         }
         nextRowY += ROW_HEIGHT;
@@ -297,26 +263,16 @@ export default class PlinkoEngine {
       this.lastGeneratedRowY = Math.max(this.lastGeneratedRowY, nextRowY - ROW_HEIGHT);
     }
     
-    // Remove rows that are too far above viewport
+    // Clean up rows that are out of view
     for (const [rowY, rowPins] of this.rowPinPositions.entries()) {
-      if (rowY < viewportTop) {
+      if (rowY < viewportTop || rowY > viewportBottom) {
         Matter.Composite.remove(this.engine.world, rowPins);
         this.pins = this.pins.filter(pin => !rowPins.includes(pin));
         this.rowPinPositions.delete(rowY);
         
-        // Update firstVisibleRowY only if we have remaining rows
         if (this.rowPinPositions.size > 0) {
           this.firstVisibleRowY = Math.min(...this.rowPinPositions.keys());
         }
-      }
-    }
-    
-    // Remove rows that are too far below viewport
-    for (const [rowY, rowPins] of this.rowPinPositions.entries()) {
-      if (rowY > viewportBottom) {
-        Matter.Composite.remove(this.engine.world, rowPins);
-        this.pins = this.pins.filter(pin => !rowPins.includes(pin));
-        this.rowPinPositions.delete(rowY);
       }
     }
   }
