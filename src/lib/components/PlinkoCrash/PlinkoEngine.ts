@@ -218,7 +218,7 @@ export default class PlinkoEngine {
   }
 
   private createDeathPassage(rowY: number, isOffset: boolean) {
-    const { PADDING_X, PINS_PER_ROW, DEATH_PASSAGE_CATEGORY, BALL_CATEGORY, DEATH_PASSAGE_WIDTH, DEATH_PASSAGE_HEIGHT } = PlinkoEngine;
+    const { PADDING_X, PINS_PER_ROW, DEATH_PASSAGE_CATEGORY, BALL_CATEGORY, DEATH_PASSAGE_WIDTH, DEATH_PASSAGE_HEIGHT, PEG_RADIUS } = PlinkoEngine;
     
     // Calculate pin spacing
     const pinSpacing = (this.canvas.width - PADDING_X * 2) / (PINS_PER_ROW - 1);
@@ -239,10 +239,10 @@ export default class PlinkoEngine {
       passageX = PADDING_X + (deathPassageIndex * pinSpacing) + (pinSpacing / 2);
     }
     
-    // Create the death passage body (horizontal laser) - positioned between adjacent pegs in the same row
+    // Create the death passage body (horizontal laser) - positioned at the same level as the pegs
     const deathPassage = Matter.Bodies.rectangle(
       passageX,
-      rowY, // Position at the same Y level as the pegs in this row
+      rowY,
       DEATH_PASSAGE_WIDTH,
       DEATH_PASSAGE_HEIGHT,
       {
@@ -641,9 +641,15 @@ export default class PlinkoEngine {
       
       // If we found a ball-death passage collision and it's the tracked ball
       if (ball && deathPassage && ball === this.trackedBall) {
-        console.log('Ball hit death passage! Game over.');
-        this.handleDeathGameOver();
-        break; // Only handle the first collision
+        // Additional check: only trigger death if ball is moving downward
+        // This prevents false positives when ball bounces off nearby pegs
+        if (ball.velocity.y > 0) {
+          console.log('Ball hit death passage while moving downward! Game over.');
+          this.handleDeathGameOver();
+          break; // Only handle the first collision
+        } else {
+          console.log('Ball hit death passage but was moving upward, ignoring collision.');
+        }
       }
     }
   }
