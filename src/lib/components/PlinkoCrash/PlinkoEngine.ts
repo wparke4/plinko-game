@@ -16,7 +16,7 @@ export default class PlinkoEngine {
   static readonly ROW_HEIGHT = 35; // Reduced from 50 to fit more rows
   static readonly VIEWPORT_BUFFER = 2; // Number of screen heights to keep pins loaded above and below viewport
   static readonly TERMINAL_VELOCITY = 12; // Maximum fall speed for balls
-  static readonly PINS_PER_ROW = 21; // Increased from 20 to 21 pins per row
+  static readonly PINS_PER_ROW = 23; // Increased from 21 to 22 pins per row
   static readonly READY_BALL_SPEED = 7; // Speed of the ready ball moving side to side
 
   private engine: Matter.Engine;
@@ -42,6 +42,8 @@ export default class PlinkoEngine {
   private trackedBall: Matter.Body | null = null;
   private isCameraTracking: boolean = false;
   private readonly CAMERA_MIDPOINT = PlinkoEngine.HEIGHT / 2;
+  private currentMultiplier: number = 0;
+  private startingRowY: number | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -216,6 +218,12 @@ export default class PlinkoEngine {
     // Get the ball's vertical position
     const ballY = this.trackedBall.position.y;
 
+    // Update multiplier based on rows passed
+    if (this.startingRowY !== null) {
+      const rowsPassed = Math.floor((ballY - this.startingRowY) / PlinkoEngine.ROW_HEIGHT);
+      this.currentMultiplier = Math.max(0, (rowsPassed / 10)); // Increase by 1x every 10 rows
+    }
+
     // Calculate the desired camera position to keep the ball centered
     const targetCameraY = ballY - this.CAMERA_MIDPOINT;
 
@@ -335,6 +343,10 @@ export default class PlinkoEngine {
       return;
     }
 
+    // Reset multiplier and set starting row
+    this.currentMultiplier = 0;
+    this.startingRowY = this.readyBall.position.y;
+
     // Deduct bet amount from balance
     balance.update((b) => b - currentBetAmount);
 
@@ -420,5 +432,10 @@ export default class PlinkoEngine {
         }
       }
     }
+  }
+
+  // Add getter for multiplier
+  public getCurrentMultiplier(): number {
+    return parseFloat(this.currentMultiplier.toFixed(2));
   }
 }
