@@ -3,7 +3,6 @@
   import { plinkoEngine, betAmount, balance } from '$lib/stores/game';
   import CircleNotch from 'phosphor-svelte/lib/CircleNotch';
   import type { Action } from 'svelte/action';
-  import BinsRow from './BinsRow.svelte';
   import LastWins from './LastWins.svelte';
   import PlinkoEngine from './PlinkoEngine';
   import Multiplier from './Multiplier.svelte';
@@ -26,6 +25,8 @@
   let isDropBallDisabled = $derived(
     $plinkoEngine === null || isBetAmountNegative || isBetExceedBalance
   );
+  let isGameInProgress = $derived($plinkoEngine?.isGameInProgress() ?? false);
+  let currentMultiplier = $derived($plinkoEngine?.getCurrentMultiplier() ?? 0);
 
   function handleBetClick() {
     $plinkoEngine?.dropBall();
@@ -44,18 +45,20 @@
       <canvas use:initPlinko width={WIDTH} height={HEIGHT} class="absolute inset-0 h-full w-full">
       </canvas>
     </div>
-    <BinsRow />
-    <div class="mt-4 flex justify-center">
-      <Multiplier />
-    </div>
     <div class="mt-4 flex justify-center pb-4">
-      <button
-        onclick={handleBetClick}
-        disabled={isDropBallDisabled}
-        class="touch-manipulation rounded-md bg-green-500 py-3 px-8 font-semibold text-slate-900 transition-colors hover:bg-green-400 active:bg-green-600 disabled:bg-neutral-600 disabled:text-neutral-400"
-      >
-        Drop Ball
-      </button>
+      {#if isGameInProgress}
+        <div class="multiplier-container">
+          <Multiplier multiplier={currentMultiplier} />
+        </div>
+      {:else}
+        <button
+          onclick={handleBetClick}
+          disabled={isDropBallDisabled}
+          class="touch-manipulation rounded-md bg-green-500 py-3 px-8 font-semibold text-slate-900 transition-colors hover:bg-green-400 active:bg-green-600 disabled:bg-neutral-600 disabled:text-neutral-400"
+        >
+          Drop Ball
+        </button>
+      {/if}
     </div>
   </div>
   <div class="absolute top-1/2 right-[5%] -translate-y-1/2">
@@ -65,16 +68,16 @@
 
 <style>
   :global(.multiplier) {
-    position: absolute;
-    bottom: 20%;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: min(8rem, 15vh);
+    font-size: min(4rem, 8vh);
     font-weight: bold;
-    color: rgba(255, 255, 255, 0.25);
-    z-index: -1;
-    pointer-events: none;
-    width: 100%;
+    color: rgba(255, 255, 255, 0.8);
     text-align: center;
+  }
+
+  .multiplier-container {
+    min-height: 48px; /* Match button height */
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 </style>

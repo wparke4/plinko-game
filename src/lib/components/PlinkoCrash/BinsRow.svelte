@@ -86,9 +86,6 @@
   }
 
   function getBinDisplayValue(binIndex: number): string {
-    if ($zeroedBins.has(binIndex)) {
-      return '💀';
-    }
     const adjustedPayout = $adjustedMultipliers[binIndex];
     const originalPayout = binPayouts[$rowCount][$riskLevel][binIndex];
     
@@ -106,9 +103,6 @@
   }
 
   function getBinStyle(binIndex: number): string {
-    if ($zeroedBins.has(binIndex)) {
-      return 'background-color: rgb(0, 0, 0); color: rgb(255, 255, 255); --shadow-color: rgb(32, 32, 32);';
-    }
     return `background-color: ${binColorsByRowCount[$rowCount].background[binIndex]}; --shadow-color: ${binColorsByRowCount[$rowCount].shadow[binIndex]};`;
   }
 </script>
@@ -124,16 +118,7 @@
          -->
         <div
           use:initAnimation
-          role="button"
-          tabindex="0"
-          onclick={() => handleBinClick(binIndex)}
-          onkeydown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              handleBinClick(binIndex);
-            }
-          }}
-          class="flex min-w-0 flex-1 cursor-pointer items-center justify-center rounded-xs text-[clamp(5px,2.784px+0.87vw,7px)] font-bold text-gray-950 shadow-[0_2px_var(--shadow-color)] transition-all hover:opacity-80 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 lg:rounded-md lg:text-[clamp(9px,-16.944px+2.632vw,11px)] lg:shadow-[0_3px_var(--shadow-color)]"
+          class="flex min-w-0 flex-1 items-center justify-center rounded-xs text-[clamp(5px,2.784px+0.87vw,7px)] font-bold text-gray-950 shadow-[0_2px_var(--shadow-color)] lg:rounded-md lg:text-[clamp(9px,-16.944px+2.632vw,11px)] lg:shadow-[0_3px_var(--shadow-color)]"
           style={getBinStyle(binIndex)}
         >
           {getBinDisplayValue(binIndex)}

@@ -438,4 +438,9 @@ export default class PlinkoEngine {
   public getCurrentMultiplier(): number {
     return parseFloat(this.currentMultiplier.toFixed(2));
   }
+
+  // Add method to check if game is in progress
+  public isGameInProgress(): boolean {
+    return this.trackedBall !== null;
+  }
 }
