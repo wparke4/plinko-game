@@ -7,7 +7,7 @@ export default class PlinkoEngine {
   static readonly HEIGHT = 600;
   static readonly BALL_RADIUS = 8;
   static readonly PEG_RADIUS = 4;
-  static readonly PADDING_X = 40; // Reduced padding to accommodate more pins
+  static readonly PADDING_X = 35; // Slightly reduced padding to accommodate more pins
   static readonly PADDING_TOP = 80; // Increased from 36 to create more space at top
   static readonly PADDING_BOTTOM = 28;
   static readonly PIN_CATEGORY = 0x0001;
@@ -16,7 +16,7 @@ export default class PlinkoEngine {
   static readonly ROW_HEIGHT = 35; // Reduced from 50 to fit more rows
   static readonly VIEWPORT_BUFFER = 2; // Number of screen heights to keep pins loaded above and below viewport
   static readonly TERMINAL_VELOCITY = 12; // Maximum fall speed for balls
-  static readonly PINS_PER_ROW = 20; // Increased from 19 to 20 pins per row
+  static readonly PINS_PER_ROW = 21; // Increased from 20 to 21 pins per row
   static readonly READY_BALL_SPEED = 7; // Speed of the ready ball moving side to side
 
   private engine: Matter.Engine;
