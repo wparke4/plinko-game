@@ -13,7 +13,8 @@
 
   const gameTypes = [
     { value: '/', label: 'Classic Plinko' },
-    { value: '/crash', label: 'Plinko Crash' }
+    { value: '/crash', label: 'Plinko Crash' },
+    { value: '/sheep', label: 'Plinko Sheep' }
   ];
 
   function handleGameChange(path: string) {

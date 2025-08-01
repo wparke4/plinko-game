@@ -1,6 +1,6 @@
 <script lang="ts">
   import LiveStatsWindow from '$lib/components/LiveStatsWindow/LiveStatsWindow.svelte';
-  import PlinkoCrash from '$lib/components/PlinkoCrash';
+  import PlinkoSheep from '$lib/components/PlinkoSheep';
   import SettingsWindow from '$lib/components/SettingsWindow';
   import { setBalanceFromLocalStorage, writeBalanceToLocalStorage } from '$lib/utils/game';
   import { goto } from '$app/navigation';
@@ -41,7 +41,7 @@
     <div class="mx-auto mt-5 max-w-xl min-w-[300px] drop-shadow-xl md:mt-10 lg:max-w-7xl">
       <div class="flex flex-col-reverse overflow-hidden rounded-lg lg:w-full lg:flex-row bg-gray-900">
         <div class="flex-1">
-          <PlinkoCrash />
+          <PlinkoSheep />
         </div>
       </div>
     </div>
