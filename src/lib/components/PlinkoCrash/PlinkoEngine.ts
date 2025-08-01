@@ -17,7 +17,7 @@ export default class PlinkoEngine {
   static readonly VIEWPORT_BUFFER = 2; // Number of screen heights to keep pins loaded above and below viewport
   static readonly TERMINAL_VELOCITY = 12; // Maximum fall speed for balls
   static readonly PINS_PER_ROW = 20; // Increased from 19 to 20 pins per row
-  static readonly READY_BALL_SPEED = 5; // Speed of the ready ball moving side to side
+  static readonly READY_BALL_SPEED = 7; // Speed of the ready ball moving side to side
 
   private engine: Matter.Engine;
   private render: Matter.Render;
@@ -29,6 +29,7 @@ export default class PlinkoEngine {
   private pinsLastRowXCoords: number[] = [];
   private readyBall: Matter.Body | null = null;
   private readyBallDirection: number = 1; // 1 for right, -1 for left
+  private keydownHandler: (event: KeyboardEvent) => void;
   
   // Dynamic row management
   private lastGeneratedRowY: number = 0;
@@ -63,6 +64,14 @@ export default class PlinkoEngine {
         hasBounds: true,
       },
     });
+
+    // Setup keyboard handler
+    this.keydownHandler = (event: KeyboardEvent) => {
+      if (event.code === 'Space' && !event.repeat) {
+        event.preventDefault(); // Prevent page scrolling
+        this.dropBall();
+      }
+    };
 
     // Setup physics world
     this.setupWorld();
@@ -187,12 +196,18 @@ export default class PlinkoEngine {
     Matter.Events.on(this.engine, 'beforeUpdate', () => {
       this.updateReadyBall();
     });
+
+    // Add keyboard event listener
+    window.addEventListener('keydown', this.keydownHandler);
   }
 
   stop() {
     Matter.Runner.stop(this.runner);
     Matter.Render.stop(this.render);
     Matter.Engine.clear(this.engine);
+    
+    // Remove keyboard event listener
+    window.removeEventListener('keydown', this.keydownHandler);
   }
 
   private updateCamera() {
