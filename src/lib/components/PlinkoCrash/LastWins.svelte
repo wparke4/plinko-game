@@ -25,11 +25,17 @@
   {#each lastWins as { binIndex, rowCount, riskLevel, payout: { multiplier } }}
     <div
       class="flex aspect-square flex-col items-center justify-center font-bold text-gray-950"
-      style:background-color={binColorsByRowCount[rowCount].background[binIndex]}
+      style:background-color={binIndex === -1 ? '#22c55e' : binColorsByRowCount[rowCount].background[binIndex]}
     >
-      <span>{binPayouts[rowCount][riskLevel][binIndex]}{binPayouts[rowCount][riskLevel][binIndex] < 100 ? '×' : ''}</span>
-      {#if multiplier !== binPayouts[rowCount][riskLevel][binIndex]}
-        <span class="text-xs text-red-600">({multiplier}×)</span>
+      {#if binIndex === -1}
+        <!-- Crash mode cash out -->
+        <span class="text-white">{multiplier.toFixed(2)}×</span>
+      {:else}
+        <!-- Classic plinko mode -->
+        <span>{binPayouts[rowCount][riskLevel][binIndex]}{binPayouts[rowCount][riskLevel][binIndex] < 100 ? '×' : ''}</span>
+        {#if multiplier !== binPayouts[rowCount][riskLevel][binIndex]}
+          <span class="text-xs text-red-600">({multiplier.toFixed(2)}×)</span>
+        {/if}
       {/if}
     </div>
   {/each}

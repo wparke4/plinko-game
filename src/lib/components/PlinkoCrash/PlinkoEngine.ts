@@ -1,5 +1,6 @@
 import Matter from 'matter-js';
 import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory, currentMultiplier } from '$lib/stores/game';
+import { RiskLevel, type RowCount } from '$lib/types';
 import { get } from 'svelte/store';
 
 export default class PlinkoEngine {
@@ -71,7 +72,13 @@ export default class PlinkoEngine {
     this.keydownHandler = (event: KeyboardEvent) => {
       if (event.code === 'Space' && !event.repeat) {
         event.preventDefault(); // Prevent page scrolling
-        this.dropBall();
+        
+        // If game is in progress, cash out. Otherwise, drop a ball.
+        if (this.isGameInProgress()) {
+          this.cashOut();
+        } else {
+          this.dropBall();
+        }
       }
     };
 
@@ -434,6 +441,87 @@ export default class PlinkoEngine {
         this.createReadyBall();
       }
     });
+  }
+
+  cashOut() {
+    if (!this.isGameInProgress() || !this.trackedBall) {
+      console.log('No game in progress, cannot cash out');
+      return;
+    }
+
+    console.log('Cashing out...');
+
+    // Get the bet amount for this ball
+    const ballBetAmount = this.activeBalls.get(this.trackedBall);
+    if (!ballBetAmount) {
+      console.log('Could not find bet amount for this ball');
+      return;
+    }
+
+    // Calculate winnings
+    const displayedMultiplier = parseFloat(this.currentMultiplier.toFixed(2)); // Format to match UI display
+    const winAmount = ballBetAmount * displayedMultiplier;
+    const profit = winAmount - ballBetAmount;
+
+    console.log('Cash out details:', {
+      betAmount: ballBetAmount,
+      multiplier: displayedMultiplier,
+      winAmount,
+      profit
+    });
+
+    // Update balance with winnings
+    balance.update((b) => b + winAmount);
+
+    // Add to win records
+    winRecords.update((records) => [
+      {
+        id: Date.now().toString(), // Convert to string as expected by WinRecord type
+        betAmount: ballBetAmount,
+        rowCount: 16 as RowCount, // Use a default row count for crash mode
+        riskLevel: RiskLevel.MEDIUM, // Use default risk level for crash mode
+        binIndex: -1, // Use -1 to indicate this is a crash mode cash out (no bins)
+        payout: {
+          multiplier: displayedMultiplier, // Use the formatted multiplier
+          value: winAmount,
+        },
+        profit,
+      },
+      ...records.slice(0, 9), // Keep only last 10 records
+    ]);
+
+    // Update profit history - just add the profit number
+    totalProfitHistory.update((history) => {
+      const newTotal = (history[history.length - 1] || 0) + profit;
+      return [...history, newTotal];
+    });
+
+    // Remove the tracked ball and clean up
+    Matter.Composite.remove(this.engine.world, this.trackedBall);
+    this.activeBalls.delete(this.trackedBall);
+    betAmountOfExistingBalls.update((balls) => {
+      const updated = { ...balls };
+      delete updated[this.trackedBall!.id];
+      return updated;
+    });
+
+    // Reset game state
+    this.trackedBall = null;
+    this.isCameraTracking = false;
+    this.currentMultiplier = 1.0;
+    currentMultiplier.set(this.currentMultiplier);
+    this.startingRowY = null;
+
+    // Reset camera view to initial position
+    Matter.Render.lookAt(this.render, {
+      min: { x: 0, y: 0 },
+      max: { x: PlinkoEngine.WIDTH, y: PlinkoEngine.HEIGHT }
+    });
+
+    // Create a new ready ball
+    this.createReadyBall();
+
+    console.log('Cash out complete');
   }
 
   private limitBallVelocities() {
