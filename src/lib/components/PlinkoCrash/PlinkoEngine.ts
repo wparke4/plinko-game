@@ -8,7 +8,7 @@ export default class PlinkoEngine {
   static readonly BALL_RADIUS = 8;
   static readonly PEG_RADIUS = 4;
   static readonly PADDING_X = 40; // Reduced padding to accommodate more pins
-  static readonly PADDING_TOP = 36;
+  static readonly PADDING_TOP = 80; // Increased from 36 to create more space at top
   static readonly PADDING_BOTTOM = 28;
   static readonly PIN_CATEGORY = 0x0001;
   static readonly BALL_CATEGORY = 0x0002;
@@ -276,7 +276,7 @@ export default class PlinkoEngine {
 
     this.readyBall = Matter.Bodies.circle(
       PlinkoEngine.WIDTH / 2,
-      PlinkoEngine.BALL_RADIUS + 5, // Slightly above top
+      PlinkoEngine.PADDING_TOP - 20, // Position ball 20 units above the first row of pegs
       PlinkoEngine.BALL_RADIUS,
       {
         isStatic: true, // Make it static so it doesn't fall
