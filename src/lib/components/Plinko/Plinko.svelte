@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { plinkoEngine } from '$lib/stores/game';
+  import { plinkoEngine, betAmount, balance } from '$lib/stores/game';
   import CircleNotch from 'phosphor-svelte/lib/CircleNotch';
   import type { Action } from 'svelte/action';
   import BinsRow from './BinsRow.svelte';
@@ -18,10 +18,20 @@
       },
     };
   };
+
+  let isBetAmountNegative = $derived($betAmount < 0);
+  let isBetExceedBalance = $derived($betAmount > $balance);
+  let isDropBallDisabled = $derived(
+    $plinkoEngine === null || isBetAmountNegative || isBetExceedBalance
+  );
+
+  function handleBetClick() {
+    $plinkoEngine?.dropBall();
+  }
 </script>
 
 <div class="relative bg-gray-900">
-  <div class="mx-auto flex h-full flex-col px-4 pb-4" style:max-width={`${WIDTH}px`}>
+  <div class="mx-auto flex h-full flex-col px-4" style:max-width={`${WIDTH}px`}>
     <div class="relative w-full" style:aspect-ratio={`${WIDTH} / ${HEIGHT}`}>
       {#if $plinkoEngine === null}
         <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
@@ -33,6 +43,15 @@
       </canvas>
     </div>
     <BinsRow />
+    <div class="mt-4 flex justify-center pb-4">
+      <button
+        onclick={handleBetClick}
+        disabled={isDropBallDisabled}
+        class="touch-manipulation rounded-md bg-green-500 py-3 px-8 font-semibold text-slate-900 transition-colors hover:bg-green-400 active:bg-green-600 disabled:bg-neutral-600 disabled:text-neutral-400"
+      >
+        Drop Ball
+      </button>
+    </div>
   </div>
   <div class="absolute top-1/2 right-[5%] -translate-y-1/2">
     <LastWins />
