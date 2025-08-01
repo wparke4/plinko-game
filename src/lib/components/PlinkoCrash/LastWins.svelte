@@ -11,7 +11,7 @@
 
   let { winCount = 4 }: Props = $props();
 
-  let lastWins = $derived($winRecords.slice(-winCount).toReversed());
+  let lastWins = $derived($winRecords.slice(0, winCount));
 </script>
 
 <!-- Clamps in mobile:
