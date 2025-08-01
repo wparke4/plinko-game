@@ -52,7 +52,7 @@
       <div class="multiplier-container">
         <Multiplier multiplier={$currentMultiplier} />
       </div>
-      {#if !isGameInProgress}
+      <div class="flex gap-4">
         <button
           onclick={handleBetClick}
           disabled={isDropBallDisabled}
@@ -60,14 +60,13 @@
         >
           Drop Ball
         </button>
-      {:else}
         <button
           onclick={handleResetClick}
           class="touch-manipulation rounded-md bg-red-500 py-3 px-8 font-semibold text-white transition-colors hover:bg-red-400 active:bg-red-600"
         >
           Reset Game
         </button>
-      {/if}
+      </div>
     </div>
   </div>
   <div class="absolute top-1/2 right-[5%] -translate-y-1/2">

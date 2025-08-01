@@ -48,6 +48,7 @@
   );
 
   let hasOutstandingBalls = $derived(Object.keys($betAmountOfExistingBalls).length > 0);
+  let isGameInProgress = $derived($plinkoEngine?.isGameInProgress() ?? false);
 
   const handleBetAmountFocusOut: FormEventHandler<HTMLInputElement> = (e) => {
     const parsedValue = parseFloat(e.currentTarget.value.trim());
@@ -101,7 +102,11 @@
 
   function handleBetClick() {
     if (betMode === BetMode.MANUAL) {
-      $plinkoEngine?.dropBall();
+      if (isGameInProgress) {
+        $plinkoEngine?.resetGame();
+      } else {
+        $plinkoEngine?.dropBall();
+      }
     } else if (autoBetInterval === null) {
       autoBetsLeft = autoBetInput === 0 ? null : autoBetInput;
       autoBetInterval = setInterval(autoBetDropBall, autoBetIntervalMs);
@@ -279,10 +284,11 @@
     class={twMerge(
       'touch-manipulation rounded-md bg-green-500 py-3 font-semibold text-slate-900 transition-colors hover:bg-green-400 active:bg-green-600 disabled:bg-neutral-600 disabled:text-neutral-400',
       autoBetInterval !== null && 'bg-yellow-500 hover:bg-yellow-400 active:bg-yellow-600',
+      betMode === BetMode.MANUAL && isGameInProgress && 'bg-red-500 hover:bg-red-400 active:bg-red-600 text-white',
     )}
   >
     {#if betMode === BetMode.MANUAL}
-      Drop Ball
+      {isGameInProgress ? 'Reset Game' : 'Drop Ball'}
     {:else if autoBetInterval === null}
       Start Autobet
     {:else}

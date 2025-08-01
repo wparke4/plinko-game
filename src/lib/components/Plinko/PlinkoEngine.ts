@@ -48,6 +48,8 @@ class PlinkoEngine {
   private engine: Matter.Engine;
   private render: Matter.Render;
   private runner: Matter.Runner;
+  private activeBalls: Map<Matter.Body, number> = new Map();
+  private trackedBall: Matter.Body | null = null;
 
   /**
    * Every pin of the game.
@@ -188,6 +190,12 @@ class PlinkoEngine {
    * Drops a new ball from the top with a random horizontal offset, and deducts the balance.
    */
   dropBall() {
+    // Prevent dropping another ball if game is already in progress
+    if (this.isGameInProgress()) {
+      console.log('Game already in progress, cannot drop another ball');
+      return;
+    }
+
     const ballOffsetRangeX = this.pinDistanceX * 0.8;
     const ballRadius = this.pinRadius * 2;
     const { friction, frictionAirByRowCount } = PlinkoEngine.ballFrictions;
@@ -214,6 +222,10 @@ class PlinkoEngine {
     );
     Matter.Composite.add(this.engine.world, ball);
 
+    // Track the ball
+    this.trackedBall = ball;
+    this.activeBalls.set(ball, this.betAmount);
+
     betAmountOfExistingBalls.update((value) => ({ ...value, [ball.id]: this.betAmount }));
     balance.update((balance) => balance - this.betAmount);
   }
@@ -234,6 +246,9 @@ class PlinkoEngine {
     return (this.canvas.width - PlinkoEngine.PADDING_X * 2) / (lastRowPinCount - 1);
   }
 
+  /**
+   * Gets the pin radius based on the current row count.
+   */
   private get pinRadius(): number {
     return (24 - this.rowCount) / 2;
   }
@@ -289,6 +304,15 @@ class PlinkoEngine {
     }
 
     Matter.Composite.remove(this.engine.world, ball);
+    
+    // Clear tracked ball if this is the one being removed
+    if (this.trackedBall === ball) {
+      this.trackedBall = null;
+    }
+    
+    // Remove from active balls tracking
+    this.activeBalls.delete(ball);
+    
     betAmountOfExistingBalls.update((value) => {
       const newValue = { ...value };
       delete newValue[ball.id];
@@ -384,6 +408,37 @@ class PlinkoEngine {
       }
     });
     betAmountOfExistingBalls.set({});
+  }
+
+  /**
+   * Check if there are any active balls in the game
+   */
+  public isGameInProgress(): boolean {
+    return this.trackedBall !== null;
+  }
+
+  /**
+   * Reset the game by removing all balls and clearing their bet amounts
+   */
+  public resetGame(): void {
+    console.log('Resetting game...');
+    
+    // Remove tracked ball if it exists
+    if (this.trackedBall) {
+      Matter.Composite.remove(this.engine.world, this.trackedBall);
+      this.activeBalls.delete(this.trackedBall);
+      betAmountOfExistingBalls.update((balls) => {
+        const updated = { ...balls };
+        delete updated[this.trackedBall!.id];
+        return updated;
+      });
+      this.trackedBall = null;
+    }
+    
+    // Remove all other balls just in case
+    this.removeAllBalls();
+    
+    console.log('Game reset complete');
   }
 }
 
