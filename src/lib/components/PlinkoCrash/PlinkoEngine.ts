@@ -7,16 +7,16 @@ export default class PlinkoEngine {
   static readonly HEIGHT = 600;
   static readonly BALL_RADIUS = 8;
   static readonly PEG_RADIUS = 4;
-  static readonly PADDING_X = 52;
+  static readonly PADDING_X = 40; // Reduced padding to accommodate more pins
   static readonly PADDING_TOP = 36;
   static readonly PADDING_BOTTOM = 28;
-  static readonly INITIAL_ROW_COUNT = 11; // Initial rows for triangle pattern
   static readonly PIN_CATEGORY = 0x0001;
   static readonly BALL_CATEGORY = 0x0002;
   static readonly WALL_CATEGORY = 0x0004;  // New category for walls
-  static readonly ROW_HEIGHT = 50; // Height between rows
+  static readonly ROW_HEIGHT = 35; // Reduced from 50 to fit more rows
   static readonly VIEWPORT_BUFFER = 2; // Number of screen heights to keep pins loaded above and below viewport
-  static readonly TERMINAL_VELOCITY = 8; // Maximum fall speed for balls
+  static readonly TERMINAL_VELOCITY = 12; // Maximum fall speed for balls
+  static readonly PINS_PER_ROW = 20; // Increased from 19 to 20 pins per row
 
   private engine: Matter.Engine;
   private render: Matter.Render;
@@ -30,7 +30,6 @@ export default class PlinkoEngine {
   // Dynamic row management
   private lastGeneratedRowY: number = 0;
   private firstVisibleRowY: number = 0;
-  private lastRowPinCount: number = 0;
   private rowPinPositions: Map<number, Matter.Body[]> = new Map(); // Y position to pins mapping
   
   // Camera tracking properties
@@ -78,8 +77,7 @@ export default class PlinkoEngine {
   }
 
   private get pinDistanceX(): number {
-    const lastRowPinCount = 3 + PlinkoEngine.INITIAL_ROW_COUNT - 1;
-    return (this.canvas.width - PlinkoEngine.PADDING_X * 2) / (lastRowPinCount - 1);
+    return (this.canvas.width - PlinkoEngine.PADDING_X * 2) / (PlinkoEngine.PINS_PER_ROW - 1);
   }
 
   private setupWorld() {
@@ -112,53 +110,15 @@ export default class PlinkoEngine {
   }
 
   private placePinsAndWalls() {
-    const { PADDING_X, PADDING_TOP, PADDING_BOTTOM, PIN_CATEGORY, BALL_CATEGORY, INITIAL_ROW_COUNT } = PlinkoEngine;
-
     // Clear existing pins and walls if any
     this.clearExistingPins();
 
-    // Place initial triangle pattern exactly as before
-    for (let row = 0; row < INITIAL_ROW_COUNT; ++row) {
-      const rowY =
-        PADDING_TOP +
-        ((this.canvas.height - PADDING_TOP - PADDING_BOTTOM) / (INITIAL_ROW_COUNT - 1)) * row;
+    // Start generating rows right from the top
+    this.firstVisibleRowY = PlinkoEngine.PADDING_TOP;
+    this.lastGeneratedRowY = PlinkoEngine.PADDING_TOP;
 
-      const rowPaddingX = PADDING_X + ((INITIAL_ROW_COUNT - 1 - row) * this.pinDistanceX) / 2;
-      const pinCount = 3 + row;
-      const rowPins: Matter.Body[] = [];
-
-      for (let col = 0; col < pinCount; ++col) {
-        const colX = rowPaddingX + ((this.canvas.width - rowPaddingX * 2) / (pinCount - 1)) * col;
-        const pin = Matter.Bodies.circle(colX, rowY, PlinkoEngine.PEG_RADIUS, {
-          isStatic: true,
-          restitution: 0.8 + (Math.random() - 0.5) * 0.1, // Add slight randomness to pin bounciness
-          friction: 0.3 + (Math.random() - 0.5) * 0.1, // Add slight randomness to pin friction
-          render: {
-            fillStyle: '#ffffff',
-          },
-          collisionFilter: {
-            category: PIN_CATEGORY,
-            mask: BALL_CATEGORY,
-          },
-        });
-        
-        this.pins.push(pin);
-        rowPins.push(pin);
-        
-        if (row === INITIAL_ROW_COUNT - 1) {
-          this.pinsLastRowXCoords.push(colX);
-          this.lastRowPinCount = pinCount;
-        }
-      }
-      
-      this.rowPinPositions.set(rowY, rowPins);
-      Matter.Composite.add(this.engine.world, rowPins);
-    }
-
-    // Set the last generated row position to the last row of the initial triangle
-    const lastInitialRowY = PADDING_TOP + ((this.canvas.height - PADDING_TOP - PADDING_BOTTOM) / (INITIAL_ROW_COUNT - 1)) * (INITIAL_ROW_COUNT - 1);
-    this.lastGeneratedRowY = lastInitialRowY;
-    this.firstVisibleRowY = PADDING_TOP;
+    // Generate initial set of rows to fill the viewport
+    this.manageDynamicRows();
   }
 
   private clearExistingPins() {
@@ -177,14 +137,14 @@ export default class PlinkoEngine {
   }
 
     private createRowOfPins(rowY: number, pinCount: number, isOffset: boolean = false) {
-    const { PADDING_X, PIN_CATEGORY, BALL_CATEGORY } = PlinkoEngine;
+    const { PADDING_X, PIN_CATEGORY, BALL_CATEGORY, PINS_PER_ROW } = PlinkoEngine;
     const rowPins: Matter.Body[] = [];
     
-    // Calculate the base X positions - use the same spacing as the initial triangle
-    const pinSpacing = (this.canvas.width - PADDING_X * 2) / (this.lastRowPinCount - 1);
+    // Calculate the base X positions using fixed spacing
+    const pinSpacing = (this.canvas.width - PADDING_X * 2) / (PINS_PER_ROW - 1);
     
-    // Calculate how many pins we need for consistent density
-    const effectivePinCount = this.lastRowPinCount;
+    // For offset rows, we'll create one less pin and shift everything right by half spacing
+    const effectivePinCount = isOffset ? PINS_PER_ROW - 1 : PINS_PER_ROW;
     
     for (let col = 0; col < effectivePinCount; ++col) {
       let colX = PADDING_X + (pinSpacing * col);
@@ -193,14 +153,11 @@ export default class PlinkoEngine {
       if (isOffset) {
         colX += pinSpacing / 2;
       }
-      
-      // Skip first and last pins on offset rows to maintain consistent pattern
-      if (isOffset && (col === 0 || col === effectivePinCount - 1)) {
-        continue;
-      }
 
       const pin = Matter.Bodies.circle(colX, rowY, PlinkoEngine.PEG_RADIUS, {
         isStatic: true,
+        restitution: 0.8 + (Math.random() - 0.5) * 0.1, // Add slight randomness to pin bounciness
+        friction: 0.3 + (Math.random() - 0.5) * 0.1, // Add slight randomness to pin friction
         render: {
           fillStyle: '#ffffff',
         },
@@ -282,7 +239,7 @@ export default class PlinkoEngine {
           const isOffset = rowIndex % 2 === 1;
           
           // Use the same pin count as the last row of the initial triangle
-          this.createRowOfPins(nextRowY, this.lastRowPinCount, isOffset);
+          this.createRowOfPins(nextRowY, PlinkoEngine.PINS_PER_ROW, isOffset);
         }
         nextRowY += ROW_HEIGHT;
       }
