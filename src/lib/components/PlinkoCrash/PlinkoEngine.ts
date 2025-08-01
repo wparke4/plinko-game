@@ -15,6 +15,7 @@ export default class PlinkoEngine {
   static readonly BALL_CATEGORY = 0x0002;
   static readonly WALL_CATEGORY = 0x0004;  // New category for walls
   static readonly DEATH_PASSAGE_CATEGORY = 0x0008;  // New category for death passages
+  static readonly EXPLOSION_CATEGORY = 0x0010;  // New category for explosion particles
   static readonly ROW_HEIGHT = 35; // Reduced from 50 to fit more rows
   static readonly VIEWPORT_BUFFER = 2; // Number of screen heights to keep pins loaded above and below viewport
   static readonly TERMINAL_VELOCITY = 12; // Maximum fall speed for balls
@@ -52,6 +53,12 @@ export default class PlinkoEngine {
   private readonly CAMERA_MIDPOINT = PlinkoEngine.HEIGHT / 2;
   private currentMultiplier: number = 0;
   private startingRowY: number | null = null;
+
+  // Explosion properties
+  private explosionParticles: Matter.Body[] = [];
+  private isGameDead: boolean = false;
+  private explosionStartTime: number = 0;
+  private explosionDuration: number = 3000; // 3 seconds
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -102,6 +109,7 @@ export default class PlinkoEngine {
       this.updateCamera();
       this.limitBallVelocities();
       this.handleBallWrapping();
+      this.updateExplosionParticles();
     });
 
     // Setup collision detection for death passages
@@ -263,6 +271,116 @@ export default class PlinkoEngine {
     this.deathPassages.push(deathPassage);
     this.rowDeathPassages.set(rowY, deathPassage);
     Matter.Composite.add(this.engine.world, deathPassage);
+  }
+
+  private createExplosion(x: number, y: number) {
+    console.log('Creating explosion at:', { x, y });
+    
+    this.isGameDead = true;
+    this.explosionStartTime = Date.now();
+    
+    // Clear any existing explosion particles
+    if (this.explosionParticles.length > 0) {
+      Matter.Composite.remove(this.engine.world, this.explosionParticles);
+      this.explosionParticles = [];
+    }
+    
+    // Create multiple waves of explosion particles
+    const particleCount = 50; // Total number of particles
+    const colors = ['#ff0000', '#ff4400', '#ff8800', '#ffaa00', '#ffff00', '#ffffff'];
+    
+    for (let i = 0; i < particleCount; i++) {
+      // Create particles with random angles and speeds
+      const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.5;
+      const speed = 8 + Math.random() * 12; // Random speed between 8-20
+      const size = 3 + Math.random() * 8; // Random size between 3-11
+      
+      const particle = Matter.Bodies.circle(x, y, size, {
+        frictionAir: 0.02, // Low air friction so particles travel far
+        restitution: 0.8,
+        density: 0.001, // Very light particles
+        render: {
+          fillStyle: colors[Math.floor(Math.random() * colors.length)],
+          strokeStyle: '#ffffff',
+          lineWidth: 1,
+        },
+        collisionFilter: {
+          category: PlinkoEngine.EXPLOSION_CATEGORY,
+          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY, // Can collide with pins and walls
+        },
+      });
+      
+      // Set initial velocity in explosion direction
+      const velocityX = Math.cos(angle) * speed;
+      const velocityY = Math.sin(angle) * speed;
+      Matter.Body.setVelocity(particle, { x: velocityX, y: velocityY });
+      
+      this.explosionParticles.push(particle);
+    }
+    
+    // Add all particles to the world
+    Matter.Composite.add(this.engine.world, this.explosionParticles);
+    
+    // Add screen shake effect by updating camera bounds rapidly
+    this.startScreenShake();
+  }
+
+  private startScreenShake() {
+    const shakeIntensity = 15;
+    const shakeDuration = 1000; // 1 second
+    const startTime = Date.now();
+    
+    const shakeInterval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const progress = elapsed / shakeDuration;
+      
+      if (progress >= 1 || !this.isGameDead) {
+        clearInterval(shakeInterval);
+        return;
+      }
+      
+      // Reduce shake intensity over time
+      const currentIntensity = shakeIntensity * (1 - progress);
+      const offsetX = (Math.random() - 0.5) * currentIntensity;
+      const offsetY = (Math.random() - 0.5) * currentIntensity;
+      
+      // Apply shake to camera bounds
+      Matter.Render.lookAt(this.render, {
+        min: { x: offsetX, y: this.cameraY + offsetY },
+        max: { x: PlinkoEngine.WIDTH + offsetX, y: this.cameraY + PlinkoEngine.HEIGHT + offsetY }
+      });
+    }, 16); // ~60fps
+  }
+
+  private updateExplosionParticles() {
+    if (!this.isGameDead || this.explosionParticles.length === 0) {
+      return;
+    }
+    
+    const elapsed = Date.now() - this.explosionStartTime;
+    const progress = elapsed / this.explosionDuration;
+    
+    // Update particle appearance based on time (fade out)
+    for (const particle of this.explosionParticles) {
+      if (particle.render && particle.render.fillStyle) {
+        const alpha = Math.max(0, 1 - progress);
+        const baseColor = particle.render.fillStyle as string;
+        
+        // Extract RGB from hex color and add alpha
+        if (baseColor.startsWith('#')) {
+          const r = parseInt(baseColor.substr(1, 2), 16);
+          const g = parseInt(baseColor.substr(3, 2), 16);
+          const b = parseInt(baseColor.substr(5, 2), 16);
+          particle.render.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+      }
+    }
+    
+    // Remove explosion particles after duration
+    if (progress >= 1) {
+      Matter.Composite.remove(this.engine.world, this.explosionParticles);
+      this.explosionParticles = [];
+    }
   }
 
   start() {
@@ -438,6 +556,12 @@ export default class PlinkoEngine {
     const currentBetAmount = get(betAmount);
     const currentBalance = get(balance);
 
+    // Prevent dropping balls if game is dead - player must reset first
+    if (this.isGameDead) {
+      console.log('Game is dead! Please reset the game first.');
+      return;
+    }
+
     // Prevent dropping another ball if game is already in progress
     if (this.isGameInProgress()) {
       console.log('Game already in progress, cannot drop another ball');
@@ -520,6 +644,12 @@ export default class PlinkoEngine {
   }
 
   cashOut() {
+    // Prevent cashing out if game is dead
+    if (this.isGameDead) {
+      console.log('Game is dead! Please reset the game first.');
+      return;
+    }
+
     if (!this.isGameInProgress() || !this.trackedBall) {
       console.log('No game in progress, cannot cash out');
       return;
@@ -662,6 +792,10 @@ export default class PlinkoEngine {
 
     console.log('Handling death game over...');
 
+    // Get the explosion position from the ball's current position
+    const explosionX = this.trackedBall.position.x;
+    const explosionY = this.trackedBall.position.y;
+
     // Get the bet amount for this ball
     const ballBetAmount = this.activeBalls.get(this.trackedBall);
     if (!ballBetAmount) {
@@ -718,23 +852,17 @@ export default class PlinkoEngine {
       return updated;
     });
 
-    // Reset game state
+    // Clear the tracked ball reference before creating explosion
     this.trackedBall = null;
     this.isCameraTracking = false;
-    this.currentMultiplier = 1.0;
-    currentMultiplier.set(this.currentMultiplier);
-    this.startingRowY = null;
 
-    // Reset camera view to initial position
-    Matter.Render.lookAt(this.render, {
-      min: { x: 0, y: 0 },
-      max: { x: PlinkoEngine.WIDTH, y: PlinkoEngine.HEIGHT }
-    });
+    // CREATE THE EXPLOSION! 🎆💥
+    this.createExplosion(explosionX, explosionY);
 
-    // Create a new ready ball
-    this.createReadyBall();
+    // DON'T auto-reset! Player must manually reset the game.
+    // The explosion will remain visible until they reset.
 
-    console.log('Death game over complete');
+    console.log('Death explosion created - player must manually reset');
   }
 
   // Add getter for multiplier
@@ -747,9 +875,24 @@ export default class PlinkoEngine {
     return this.trackedBall !== null;
   }
 
+  // Add method to check if game is dead (hit death passage)
+  public getIsGameDead(): boolean {
+    return this.isGameDead;
+  }
+
   // Add reset method to allow starting a new game
   public resetGame() {
     console.log('Resetting game...');
+    
+    // Clear explosion state first
+    this.isGameDead = false;
+    this.explosionStartTime = 0;
+    
+    // Remove explosion particles if any
+    if (this.explosionParticles.length > 0) {
+      Matter.Composite.remove(this.engine.world, this.explosionParticles);
+      this.explosionParticles = [];
+    }
     
     // Remove tracked ball if it exists
     if (this.trackedBall) {
@@ -782,6 +925,6 @@ export default class PlinkoEngine {
     // Create a new ready ball
     this.createReadyBall();
     
-    console.log('Game reset complete');
+    console.log('Game reset complete - ready for new game!');
   }
 }
