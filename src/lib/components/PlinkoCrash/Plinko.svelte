@@ -45,12 +45,11 @@
       <canvas use:initPlinko width={WIDTH} height={HEIGHT} class="absolute inset-0 h-full w-full">
       </canvas>
     </div>
-    <div class="mt-4 flex justify-center pb-4">
-      {#if isGameInProgress}
-        <div class="multiplier-container">
-          <Multiplier multiplier={currentMultiplier} />
-        </div>
-      {:else}
+    <div class="mt-4 flex flex-col items-center gap-4 pb-4">
+      <div class="multiplier-container">
+        <Multiplier multiplier={currentMultiplier} />
+      </div>
+      {#if !isGameInProgress}
         <button
           onclick={handleBetClick}
           disabled={isDropBallDisabled}
@@ -68,14 +67,14 @@
 
 <style>
   :global(.multiplier) {
-    font-size: min(4rem, 8vh);
+    font-size: min(3rem, 6vh);
     font-weight: bold;
     color: rgba(255, 255, 255, 0.8);
     text-align: center;
   }
 
   .multiplier-container {
-    min-height: 48px; /* Match button height */
+    min-height: 3rem;
     display: flex;
     align-items: center;
     justify-content: center;
