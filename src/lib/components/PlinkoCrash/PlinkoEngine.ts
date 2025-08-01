@@ -16,7 +16,7 @@ export default class PlinkoEngine {
   static readonly WALL_CATEGORY = 0x0004;  // New category for walls
   static readonly ROW_HEIGHT = 50; // Height between rows
   static readonly VIEWPORT_BUFFER = 2; // Number of screen heights to keep pins loaded above and below viewport
-  static readonly TERMINAL_VELOCITY = 4; // Maximum fall speed for balls
+  static readonly TERMINAL_VELOCITY = 8; // Maximum fall speed for balls
 
   private engine: Matter.Engine;
   private render: Matter.Render;
@@ -45,7 +45,7 @@ export default class PlinkoEngine {
     this.engine = Matter.Engine.create({
       gravity: {
         x: 0,
-        y: 0.6, // Reduced from 0.8 to slow down vertical acceleration
+        y: 1, // Use default Matter.js gravity
         scale: 0.001
       }
     });
@@ -73,6 +73,7 @@ export default class PlinkoEngine {
     Matter.Events.on(this.engine, 'afterUpdate', () => {
       this.updateCamera();
       this.limitBallVelocities();
+      this.handleBallWrapping();
     });
   }
 
@@ -82,25 +83,32 @@ export default class PlinkoEngine {
   }
 
   private setupWorld() {
-    const walls = [
-      Matter.Bodies.rectangle(-50, PlinkoEngine.HEIGHT / 2, 100, PlinkoEngine.HEIGHT, { 
-        isStatic: true,
-        collisionFilter: {
-          category: PlinkoEngine.WALL_CATEGORY,
-          mask: PlinkoEngine.BALL_CATEGORY
-        }
-      }), // Left
-      Matter.Bodies.rectangle(PlinkoEngine.WIDTH + 50, PlinkoEngine.HEIGHT / 2, 100, PlinkoEngine.HEIGHT, { 
-        isStatic: true,
-        collisionFilter: {
-          category: PlinkoEngine.WALL_CATEGORY,
-          mask: PlinkoEngine.BALL_CATEGORY
-        }
-      }), // Right
-    ];
+    // No walls needed for wrapping behavior
+  }
 
-    Matter.Composite.add(this.engine.world, walls);
-    this.walls = walls;  // Store walls reference
+  private handleBallWrapping() {
+    const bodies = Matter.Composite.allBodies(this.engine.world);
+    for (const body of bodies) {
+      // Only wrap ball positions
+      if (body.collisionFilter.category === PlinkoEngine.BALL_CATEGORY) {
+        const position = body.position;
+        
+        // Check if ball has gone off either side
+        if (position.x < 0) {
+          // Wrap to right side
+          Matter.Body.setPosition(body, {
+            x: PlinkoEngine.WIDTH,
+            y: position.y
+          });
+        } else if (position.x > PlinkoEngine.WIDTH) {
+          // Wrap to left side
+          Matter.Body.setPosition(body, {
+            x: 0,
+            y: position.y
+          });
+        }
+      }
+    }
   }
 
   private placePinsAndWalls() {
@@ -312,13 +320,13 @@ export default class PlinkoEngine {
       PlinkoEngine.BALL_RADIUS,
       PlinkoEngine.BALL_RADIUS,
       {
-        restitution: 0.85, // Slightly increased bounciness for more chaotic movement
-        friction: 0.4, // Reduced surface friction
-        frictionAir: 0.008, // Significantly reduced air friction (was 0.038)
-        density: 1,
+        restitution: 0.8,
+        friction: 0.5, // Match original game's friction
+        frictionAir: 0.038, // Use similar air friction to original game's 8-row setting
+        density: 0.8, // Slightly reduce density to make it less heavy
         collisionFilter: {
           category: PlinkoEngine.BALL_CATEGORY,
-          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY,  // Update mask to include walls
+          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY,
         },
         render: {
           fillStyle: '#ff0000',
@@ -326,9 +334,9 @@ export default class PlinkoEngine {
       }
     );
 
-    // Add random initial velocity with increased horizontal range
+    // Add random initial velocity with more controlled range like original
     const randomVelocity = {
-      x: (Math.random() - 0.5) * 6,  // Increased from 2 to 6 for more horizontal momentum
+      x: (Math.random() - 0.5) * 2,  // Reduced from 6 to 2 like original
       y: 0
     };
     Matter.Body.setVelocity(ball, randomVelocity);
