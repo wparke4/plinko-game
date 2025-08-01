@@ -663,14 +663,17 @@ export default class PlinkoEngine {
       return;
     }
 
-    // Death means 0.00x multiplier - player loses everything
+    // Store the actual multiplier they had when they died (for display purposes)
+    const displayedMultiplier = parseFloat(this.currentMultiplier.toFixed(2));
+    // Death means 0.00x multiplier for payout calculation - player loses everything
     const deathMultiplier = 0.00;
     const winAmount = ballBetAmount * deathMultiplier; // This will be 0
     const profit = winAmount - ballBetAmount; // This will be negative (the full bet amount lost)
 
     console.log('Death game over details:', {
       betAmount: ballBetAmount,
-      multiplier: deathMultiplier,
+      actualMultiplier: displayedMultiplier,
+      payoutMultiplier: deathMultiplier,
       winAmount,
       profit
     });
@@ -686,8 +689,8 @@ export default class PlinkoEngine {
         riskLevel: RiskLevel.MEDIUM,
         binIndex: -2, // Use -2 to indicate this is a death passage loss (different from cash out -1)
         payout: {
-          multiplier: deathMultiplier,
-          value: winAmount,
+          multiplier: displayedMultiplier, // Use the actual multiplier they had when they died for display
+          value: winAmount, // Still 0 for actual payout
         },
         profit,
       },
