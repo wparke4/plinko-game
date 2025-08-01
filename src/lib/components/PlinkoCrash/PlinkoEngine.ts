@@ -1,5 +1,5 @@
 import Matter from 'matter-js';
-import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory } from '$lib/stores/game';
+import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory, currentMultiplier } from '$lib/stores/game';
 import { get } from 'svelte/store';
 
 export default class PlinkoEngine {
@@ -83,7 +83,8 @@ export default class PlinkoEngine {
     this.runner = Matter.Runner.create();
 
     // Setup camera update and velocity limiting
-    Matter.Events.on(this.engine, 'afterUpdate', () => {
+    Matter.Events.on(this.engine, 'beforeUpdate', () => {
+      console.log('Engine update tick');
       this.updateCamera();
       this.limitBallVelocities();
       this.handleBallWrapping();
@@ -221,7 +222,19 @@ export default class PlinkoEngine {
     // Update multiplier based on rows passed
     if (this.startingRowY !== null) {
       const rowsPassed = Math.floor((ballY - this.startingRowY) / PlinkoEngine.ROW_HEIGHT);
-      this.currentMultiplier = Math.max(0, (rowsPassed / 10)); // Increase by 1x every 10 rows
+      const newMultiplier = Math.max(0, (rowsPassed / 2)); // Increase by 0.5x every row
+      
+      // Only update if the multiplier has changed
+      if (newMultiplier !== this.currentMultiplier) {
+        this.currentMultiplier = newMultiplier;
+        currentMultiplier.set(this.currentMultiplier); // Update the store for reactivity
+        console.log('Multiplier Update:', {
+          ballY,
+          startingRowY: this.startingRowY,
+          rowsPassed,
+          newMultiplier: this.currentMultiplier
+        });
+      }
     }
 
     // Calculate the desired camera position to keep the ball centered
@@ -251,6 +264,9 @@ export default class PlinkoEngine {
       Matter.Composite.remove(this.engine.world, this.trackedBall);
       this.trackedBall = null;
       this.isCameraTracking = false;
+      // Reset multiplier when ball goes too far
+      this.currentMultiplier = 0;
+      currentMultiplier.set(this.currentMultiplier);
     }
   }
 
@@ -339,22 +355,33 @@ export default class PlinkoEngine {
     const currentBetAmount = get(betAmount);
     const currentBalance = get(balance);
 
+    // Prevent dropping another ball if game is already in progress
+    if (this.isGameInProgress()) {
+      console.log('Game already in progress, cannot drop another ball');
+      return;
+    }
+
     if (currentBetAmount <= 0 || currentBetAmount > currentBalance || !this.readyBall) {
       return;
     }
 
+    console.log('Dropping ball...');
+
     // Reset multiplier and set starting row
     this.currentMultiplier = 0;
-    this.startingRowY = this.readyBall.position.y;
+    currentMultiplier.set(this.currentMultiplier); // Update the store
+    this.startingRowY = PlinkoEngine.PADDING_TOP; // Set to first row of pins instead of ready ball position
+    console.log('Starting row Y set to:', this.startingRowY);
 
     // Deduct bet amount from balance
     balance.update((b) => b - currentBetAmount);
 
     // Create ball at ready ball's position
     const startX = this.readyBall.position.x;
+    const startY = this.readyBall.position.y;  // Use ready ball's Y position
     const ball = Matter.Bodies.circle(
       startX,
-      PlinkoEngine.BALL_RADIUS,
+      startY,  // Start at the same Y as ready ball
       PlinkoEngine.BALL_RADIUS,
       {
         restitution: 0.8,
@@ -381,7 +408,12 @@ export default class PlinkoEngine {
     this.trackedBall = ball;
     this.cameraY = 0;
     this.highestCameraY = 0;
-    this.isCameraTracking = false;
+    this.isCameraTracking = true;  // Start tracking immediately
+    console.log('Camera tracking enabled:', { 
+      trackedBall: !!this.trackedBall,
+      isCameraTracking: this.isCameraTracking,
+      ballPosition: ball.position
+    });
 
     // Track ball and its bet amount
     this.activeBalls.set(ball, currentBetAmount);
@@ -390,25 +422,14 @@ export default class PlinkoEngine {
       [ball.id]: currentBetAmount,
     }));
 
-    // Setup ball position monitoring
-    Matter.Events.on(this.engine, 'afterUpdate', () => {
-      if (this.trackedBall === ball) {
-        // Start camera tracking when ball passes midpoint
-        if (!this.isCameraTracking && ball.position.y > this.CAMERA_MIDPOINT) {
-          console.log('Starting camera tracking', {
-            ballY: ball.position.y,
-            midpoint: this.CAMERA_MIDPOINT
-          });
-          this.isCameraTracking = true;
-        }
-      }
-    });
-
     // Check if ball is removed
     Matter.Events.on(this.engine, 'afterUpdate', () => {
       if (this.trackedBall === ball && !this.engine.world.bodies.includes(ball)) {
         this.trackedBall = null;
         this.isCameraTracking = false;
+        // Reset multiplier when game ends
+        this.currentMultiplier = 0;
+        currentMultiplier.set(this.currentMultiplier);
         // Create a new ready ball for the next game
         this.createReadyBall();
       }
@@ -442,5 +463,43 @@ export default class PlinkoEngine {
   // Add method to check if game is in progress
   public isGameInProgress(): boolean {
     return this.trackedBall !== null;
+  }
+
+  // Add reset method to allow starting a new game
+  public resetGame() {
+    console.log('Resetting game...');
+    
+    // Remove tracked ball if it exists
+    if (this.trackedBall) {
+      Matter.Composite.remove(this.engine.world, this.trackedBall);
+      this.activeBalls.delete(this.trackedBall);
+      betAmountOfExistingBalls.update((balls) => {
+        const updated = { ...balls };
+        delete updated[this.trackedBall!.id];
+        return updated;
+      });
+      this.trackedBall = null;
+    }
+    
+    // Reset camera tracking
+    this.isCameraTracking = false;
+    this.cameraY = 0;
+    this.highestCameraY = 0;
+    
+    // Reset multiplier
+    this.currentMultiplier = 0;
+    currentMultiplier.set(this.currentMultiplier);
+    this.startingRowY = null;
+    
+    // Reset camera view to initial position
+    Matter.Render.lookAt(this.render, {
+      min: { x: 0, y: 0 },
+      max: { x: PlinkoEngine.WIDTH, y: PlinkoEngine.HEIGHT }
+    });
+    
+    // Create a new ready ball
+    this.createReadyBall();
+    
+    console.log('Game reset complete');
   }
 }

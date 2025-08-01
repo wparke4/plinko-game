@@ -49,6 +49,9 @@ export const totalProfitHistory = writable<number[]>([0]);
  */
 export const balance = writable<number>(DEFAULT_BALANCE);
 
+// Current multiplier during active gameplay (for Plinko Crash mode)
+export const currentMultiplier = writable<number>(0);
+
 /**
  * RGB colors for every bin. The length of the array is the number of bins.
  */
