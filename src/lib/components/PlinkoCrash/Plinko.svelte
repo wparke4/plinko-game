@@ -45,6 +45,9 @@
       </canvas>
     </div>
     <BinsRow />
+    <div class="mt-4 flex justify-center">
+      <Multiplier />
+    </div>
     <div class="mt-4 flex justify-center pb-4">
       <button
         onclick={handleBetClick}
@@ -57,9 +60,6 @@
   </div>
   <div class="absolute top-1/2 right-[5%] -translate-y-1/2">
     <LastWins />
-  </div>
-  <div class="absolute top-1/2 left-[5%] -translate-y-1/2">
-    <Multiplier />
   </div>
 </div>
 
