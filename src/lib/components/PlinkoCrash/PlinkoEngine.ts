@@ -14,11 +14,14 @@ export default class PlinkoEngine {
   static readonly PIN_CATEGORY = 0x0001;
   static readonly BALL_CATEGORY = 0x0002;
   static readonly WALL_CATEGORY = 0x0004;  // New category for walls
+  static readonly DEATH_PASSAGE_CATEGORY = 0x0008;  // New category for death passages
   static readonly ROW_HEIGHT = 35; // Reduced from 50 to fit more rows
   static readonly VIEWPORT_BUFFER = 2; // Number of screen heights to keep pins loaded above and below viewport
   static readonly TERMINAL_VELOCITY = 12; // Maximum fall speed for balls
   static readonly PINS_PER_ROW = 23; // Increased from 21 to 22 pins per row
   static readonly READY_BALL_SPEED = 7; // Speed of the ready ball moving side to side
+  static readonly DEATH_PASSAGE_WIDTH = 25; // Width of the horizontal death passage laser
+  static readonly DEATH_PASSAGE_HEIGHT = 8; // Height of the horizontal death passage laser
 
   private engine: Matter.Engine;
   private render: Matter.Render;
@@ -36,6 +39,10 @@ export default class PlinkoEngine {
   private lastGeneratedRowY: number = 0;
   private firstVisibleRowY: number = 0;
   private rowPinPositions: Map<number, Matter.Body[]> = new Map(); // Y position to pins mapping
+  
+  // Death passage management
+  private deathPassages: Matter.Body[] = [];
+  private rowDeathPassages: Map<number, Matter.Body> = new Map(); // Y position to death passage mapping
   
   // Camera tracking properties
   private cameraY: number = 0;
@@ -96,6 +103,11 @@ export default class PlinkoEngine {
       this.limitBallVelocities();
       this.handleBallWrapping();
     });
+
+    // Setup collision detection for death passages
+    Matter.Events.on(this.engine, 'collisionStart', (event) => {
+      this.handleDeathPassageCollision(event);
+    });
   }
 
   private get pinDistanceX(): number {
@@ -155,7 +167,12 @@ export default class PlinkoEngine {
       Matter.Composite.remove(this.engine.world, this.walls);
       this.walls = [];
     }
+    if (this.deathPassages.length > 0) {
+      Matter.Composite.remove(this.engine.world, this.deathPassages);
+      this.deathPassages = [];
+    }
     this.rowPinPositions.clear();
+    this.rowDeathPassages.clear();
   }
 
     private createRowOfPins(rowY: number, pinCount: number, isOffset: boolean = false) {
@@ -195,6 +212,57 @@ export default class PlinkoEngine {
     
     this.rowPinPositions.set(rowY, rowPins);
     Matter.Composite.add(this.engine.world, rowPins);
+    
+    // Create death passage for this row
+    this.createDeathPassage(rowY, isOffset);
+  }
+
+  private createDeathPassage(rowY: number, isOffset: boolean) {
+    const { PADDING_X, PINS_PER_ROW, DEATH_PASSAGE_CATEGORY, BALL_CATEGORY, DEATH_PASSAGE_WIDTH, DEATH_PASSAGE_HEIGHT } = PlinkoEngine;
+    
+    // Calculate pin spacing
+    const pinSpacing = (this.canvas.width - PADDING_X * 2) / (PINS_PER_ROW - 1);
+    
+    // Calculate number of passages (spaces between pins)
+    const numPassages = isOffset ? PINS_PER_ROW - 2 : PINS_PER_ROW - 1;
+    
+    // Randomly select a passage index
+    const deathPassageIndex = Math.floor(Math.random() * numPassages);
+    
+    // Calculate the X position of the death passage
+    let passageX: number;
+    if (isOffset) {
+      // For offset rows, passages are between offset pins
+      passageX = PADDING_X + (pinSpacing / 2) + (deathPassageIndex * pinSpacing) + (pinSpacing / 2);
+    } else {
+      // For normal rows, passages are between regular pins
+      passageX = PADDING_X + (deathPassageIndex * pinSpacing) + (pinSpacing / 2);
+    }
+    
+    // Create the death passage body (horizontal laser) - positioned between adjacent pegs in the same row
+    const deathPassage = Matter.Bodies.rectangle(
+      passageX,
+      rowY, // Position at the same Y level as the pegs in this row
+      DEATH_PASSAGE_WIDTH,
+      DEATH_PASSAGE_HEIGHT,
+      {
+        isStatic: true,
+        isSensor: true, // Make it a sensor so balls pass through but we can detect collision
+        render: {
+          fillStyle: '#ff0044', // Bright neon red
+          strokeStyle: '#ff6666',
+          lineWidth: 3,
+        },
+        collisionFilter: {
+          category: DEATH_PASSAGE_CATEGORY,
+          mask: BALL_CATEGORY,
+        },
+      }
+    );
+    
+    this.deathPassages.push(deathPassage);
+    this.rowDeathPassages.set(rowY, deathPassage);
+    Matter.Composite.add(this.engine.world, deathPassage);
   }
 
   start() {
@@ -308,6 +376,14 @@ export default class PlinkoEngine {
         this.pins = this.pins.filter(pin => !rowPins.includes(pin));
         this.rowPinPositions.delete(rowY);
         
+        // Also clean up death passage for this row
+        const deathPassage = this.rowDeathPassages.get(rowY);
+        if (deathPassage) {
+          Matter.Composite.remove(this.engine.world, deathPassage);
+          this.deathPassages = this.deathPassages.filter(dp => dp !== deathPassage);
+          this.rowDeathPassages.delete(rowY);
+        }
+        
         if (this.rowPinPositions.size > 0) {
           this.firstVisibleRowY = Math.min(...this.rowPinPositions.keys());
         }
@@ -397,7 +473,7 @@ export default class PlinkoEngine {
         density: 0.8,
         collisionFilter: {
           category: PlinkoEngine.BALL_CATEGORY,
-          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY,
+          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY | PlinkoEngine.DEATH_PASSAGE_CATEGORY,
         },
         render: {
           fillStyle: '#ff0000',
@@ -541,6 +617,115 @@ export default class PlinkoEngine {
         }
       }
     }
+  }
+
+  private handleDeathPassageCollision(event: Matter.IEventCollision<Matter.Engine>) {
+    const pairs = event.pairs;
+    
+    for (const pair of pairs) {
+      const { bodyA, bodyB } = pair;
+      
+      // Check if one body is a ball and the other is a death passage
+      let ball: Matter.Body | null = null;
+      let deathPassage: Matter.Body | null = null;
+      
+      if (bodyA.collisionFilter.category === PlinkoEngine.BALL_CATEGORY && 
+          bodyB.collisionFilter.category === PlinkoEngine.DEATH_PASSAGE_CATEGORY) {
+        ball = bodyA;
+        deathPassage = bodyB;
+      } else if (bodyB.collisionFilter.category === PlinkoEngine.BALL_CATEGORY && 
+                 bodyA.collisionFilter.category === PlinkoEngine.DEATH_PASSAGE_CATEGORY) {
+        ball = bodyB;
+        deathPassage = bodyA;
+      }
+      
+      // If we found a ball-death passage collision and it's the tracked ball
+      if (ball && deathPassage && ball === this.trackedBall) {
+        console.log('Ball hit death passage! Game over.');
+        this.handleDeathGameOver();
+        break; // Only handle the first collision
+      }
+    }
+  }
+
+  private handleDeathGameOver() {
+    if (!this.trackedBall) {
+      console.log('No tracked ball, cannot handle death game over');
+      return;
+    }
+
+    console.log('Handling death game over...');
+
+    // Get the bet amount for this ball
+    const ballBetAmount = this.activeBalls.get(this.trackedBall);
+    if (!ballBetAmount) {
+      console.log('Could not find bet amount for this ball');
+      return;
+    }
+
+    // Death means 0.00x multiplier - player loses everything
+    const deathMultiplier = 0.00;
+    const winAmount = ballBetAmount * deathMultiplier; // This will be 0
+    const profit = winAmount - ballBetAmount; // This will be negative (the full bet amount lost)
+
+    console.log('Death game over details:', {
+      betAmount: ballBetAmount,
+      multiplier: deathMultiplier,
+      winAmount,
+      profit
+    });
+
+    // No balance update needed since winAmount is 0 (player gets nothing back)
+
+    // Add to win records (actually a loss record)
+    winRecords.update((records) => [
+      {
+        id: Date.now().toString(),
+        betAmount: ballBetAmount,
+        rowCount: 16 as RowCount,
+        riskLevel: RiskLevel.MEDIUM,
+        binIndex: -2, // Use -2 to indicate this is a death passage loss (different from cash out -1)
+        payout: {
+          multiplier: deathMultiplier,
+          value: winAmount,
+        },
+        profit,
+      },
+      ...records.slice(0, 9), // Keep only last 10 records
+    ]);
+
+    // Update profit history with the loss
+    totalProfitHistory.update((history) => {
+      const newTotal = (history[history.length - 1] || 0) + profit;
+      return [...history, newTotal];
+    });
+
+    // Remove the tracked ball and clean up
+    Matter.Composite.remove(this.engine.world, this.trackedBall);
+    this.activeBalls.delete(this.trackedBall);
+    betAmountOfExistingBalls.update((balls) => {
+      const updated = { ...balls };
+      delete updated[this.trackedBall!.id];
+      return updated;
+    });
+
+    // Reset game state
+    this.trackedBall = null;
+    this.isCameraTracking = false;
+    this.currentMultiplier = 1.0;
+    currentMultiplier.set(this.currentMultiplier);
+    this.startingRowY = null;
+
+    // Reset camera view to initial position
+    Matter.Render.lookAt(this.render, {
+      min: { x: 0, y: 0 },
+      max: { x: PlinkoEngine.WIDTH, y: PlinkoEngine.HEIGHT }
+    });
+
+    // Create a new ready ball
+    this.createReadyBall();
+
+    console.log('Death game over complete');
   }
 
   // Add getter for multiplier
