@@ -17,6 +17,7 @@ export default class PlinkoEngine {
   static readonly VIEWPORT_BUFFER = 2; // Number of screen heights to keep pins loaded above and below viewport
   static readonly TERMINAL_VELOCITY = 12; // Maximum fall speed for balls
   static readonly PINS_PER_ROW = 20; // Increased from 19 to 20 pins per row
+  static readonly READY_BALL_SPEED = 5; // Speed of the ready ball moving side to side
 
   private engine: Matter.Engine;
   private render: Matter.Render;
@@ -26,6 +27,8 @@ export default class PlinkoEngine {
   private pins: Matter.Body[] = [];
   private walls: Matter.Body[] = [];
   private pinsLastRowXCoords: number[] = [];
+  private readyBall: Matter.Body | null = null;
+  private readyBallDirection: number = 1; // 1 for right, -1 for left
   
   // Dynamic row management
   private lastGeneratedRowY: number = 0;
@@ -178,6 +181,12 @@ export default class PlinkoEngine {
   start() {
     Matter.Runner.run(this.runner, this.engine);
     Matter.Render.run(this.render);
+    this.createReadyBall();
+
+    // Add event listener for ready ball movement
+    Matter.Events.on(this.engine, 'beforeUpdate', () => {
+      this.updateReadyBall();
+    });
   }
 
   stop() {
@@ -260,27 +269,71 @@ export default class PlinkoEngine {
     }
   }
 
+  private createReadyBall() {
+    if (this.readyBall) {
+      Matter.Composite.remove(this.engine.world, this.readyBall);
+    }
+
+    this.readyBall = Matter.Bodies.circle(
+      PlinkoEngine.WIDTH / 2,
+      PlinkoEngine.BALL_RADIUS + 5, // Slightly above top
+      PlinkoEngine.BALL_RADIUS,
+      {
+        isStatic: true, // Make it static so it doesn't fall
+        render: {
+          fillStyle: '#ff0000',
+        },
+        collisionFilter: {
+          category: PlinkoEngine.BALL_CATEGORY,
+          mask: 0, // No collisions while in ready state
+        },
+      }
+    );
+
+    Matter.Composite.add(this.engine.world, this.readyBall);
+  }
+
+  private updateReadyBall() {
+    if (!this.readyBall) return;
+
+    const currentX = this.readyBall.position.x;
+    
+    // Change direction if reaching bounds
+    if (currentX >= PlinkoEngine.WIDTH - PlinkoEngine.PADDING_X) {
+      this.readyBallDirection = -1;
+    } else if (currentX <= PlinkoEngine.PADDING_X) {
+      this.readyBallDirection = 1;
+    }
+
+    // Move the ball
+    Matter.Body.setPosition(this.readyBall, {
+      x: currentX + (PlinkoEngine.READY_BALL_SPEED * this.readyBallDirection),
+      y: this.readyBall.position.y
+    });
+  }
+
   dropBall() {
     const currentBetAmount = get(betAmount);
     const currentBalance = get(balance);
 
-    if (currentBetAmount <= 0 || currentBetAmount > currentBalance) {
+    if (currentBetAmount <= 0 || currentBetAmount > currentBalance || !this.readyBall) {
       return;
     }
 
     // Deduct bet amount from balance
     balance.update((b) => b - currentBetAmount);
 
-    // Create ball
+    // Create ball at ready ball's position
+    const startX = this.readyBall.position.x;
     const ball = Matter.Bodies.circle(
-      PlinkoEngine.WIDTH / 2,
+      startX,
       PlinkoEngine.BALL_RADIUS,
       PlinkoEngine.BALL_RADIUS,
       {
         restitution: 0.8,
-        friction: 0.5, // Match original game's friction
-        frictionAir: 0.038, // Use similar air friction to original game's 8-row setting
-        density: 0.8, // Slightly reduce density to make it less heavy
+        friction: 0.5,
+        frictionAir: 0.038,
+        density: 0.8,
         collisionFilter: {
           category: PlinkoEngine.BALL_CATEGORY,
           mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY,
@@ -291,20 +344,16 @@ export default class PlinkoEngine {
       }
     );
 
-    // Add random initial velocity with more controlled range like original
-    const randomVelocity = {
-      x: (Math.random() - 0.5) * 2,  // Reduced from 6 to 2 like original
-      y: 0
-    };
-    Matter.Body.setVelocity(ball, randomVelocity);
-
+    // Remove the ready ball
+    Matter.Composite.remove(this.engine.world, this.readyBall);
+    
     // Add ball to world
     Matter.Composite.add(this.engine.world, ball);
 
     // Set this as the tracked ball and reset camera
     this.trackedBall = ball;
     this.cameraY = 0;
-    this.highestCameraY = 0; // Reset highest camera position for new ball
+    this.highestCameraY = 0;
     this.isCameraTracking = false;
 
     // Track ball and its bet amount
@@ -333,6 +382,8 @@ export default class PlinkoEngine {
       if (this.trackedBall === ball && !this.engine.world.bodies.includes(ball)) {
         this.trackedBall = null;
         this.isCameraTracking = false;
+        // Create a new ready ball for the next game
+        this.createReadyBall();
       }
     });
   }
