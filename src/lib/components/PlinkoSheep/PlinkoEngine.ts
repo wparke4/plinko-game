@@ -100,8 +100,8 @@ export default class PlinkoEngine {
       if (event.code === 'Space' && !event.repeat) {
         event.preventDefault(); // Prevent page scrolling
         
-        // If cash out is complete, reset for new game
-        if (this.isCashOutComplete) {
+        // If cash out is complete OR celebrating, reset for new game
+        if (this.isCashOutComplete || this.isCashOutCelebrating) {
           this.resetGame();
         }
         // If game is in progress, cash out. Otherwise, drop a ball.
