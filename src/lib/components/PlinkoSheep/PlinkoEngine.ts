@@ -49,6 +49,7 @@ export default class PlinkoEngine {
   private revealedRows: Set<number> = new Set(); // Track which rows have been revealed
   private flashingRows: Map<number, { startTime: number, duration: number }> = new Map(); // Track flashing animations
   private lastPlayerRowY: number = 0; // Track the last row the player was at
+  private killerDeathPassage: Matter.Body | null = null; // Track which death passage killed the player
   
   // Camera tracking properties
   private cameraY: number = 0;
@@ -428,6 +429,11 @@ export default class PlinkoEngine {
   private updateFlashAnimations() {
     const currentTime = Date.now();
     
+    // Handle killer death passage flashing during death state
+    if (this.isGameDead && this.killerDeathPassage) {
+      this.updateKillerDeathPassageFlash(currentTime);
+    }
+    
     for (const [rowY, flashData] of this.flashingRows.entries()) {
       const elapsed = currentTime - flashData.startTime;
       const progress = elapsed / flashData.duration;
@@ -578,6 +584,7 @@ export default class PlinkoEngine {
       this.revealedRows.clear();
       this.flashingRows.clear();
       this.lastPlayerRowY = 0;
+      this.killerDeathPassage = null;
       
       // Hide all death passages again
       this.hideAllDeathPassages();
@@ -705,6 +712,7 @@ export default class PlinkoEngine {
     this.revealedRows.clear();
     this.flashingRows.clear();
     this.lastPlayerRowY = 0;
+    this.killerDeathPassage = null;
 
     // Deduct bet amount from balance
     balance.update((b) => b - currentBetAmount);
@@ -768,6 +776,7 @@ export default class PlinkoEngine {
         this.revealedRows.clear();
         this.flashingRows.clear();
         this.lastPlayerRowY = 0;
+        this.killerDeathPassage = null;
         
         // Hide all death passages again
         this.hideAllDeathPassages();
@@ -857,6 +866,7 @@ export default class PlinkoEngine {
     this.revealedRows.clear();
     this.flashingRows.clear();
     this.lastPlayerRowY = 0;
+    this.killerDeathPassage = null;
     
     // Hide all death passages again
     this.hideAllDeathPassages();
@@ -918,6 +928,7 @@ export default class PlinkoEngine {
         // This prevents false positives when ball bounces off nearby pegs
         if (ball.velocity.y > 0) {
           console.log('Ball hit death passage while moving downward! Game over.');
+          this.killerDeathPassage = deathPassage; // Store which passage killed the player
           this.handleDeathGameOver();
           break; // Only handle the first collision
         } else {
@@ -1002,6 +1013,9 @@ export default class PlinkoEngine {
     // CREATE THE EXPLOSION! 🎆💥
     this.createExplosion(explosionX, explosionY);
 
+    // Gray out all other death passages and highlight the killer
+    this.highlightKillerDeathPassage();
+
     // DON'T auto-reset! Player must manually reset the game.
     // The explosion will remain visible until they reset.
 
@@ -1063,6 +1077,7 @@ export default class PlinkoEngine {
     this.revealedRows.clear();
     this.flashingRows.clear();
     this.lastPlayerRowY = 0;
+    this.killerDeathPassage = null;
     
     // Hide all death passages again
     this.hideAllDeathPassages();
@@ -1087,5 +1102,45 @@ export default class PlinkoEngine {
         deathPassage.render.lineWidth = 0;
       }
     }
+  }
+
+  private highlightKillerDeathPassage() {
+    if (!this.killerDeathPassage) return;
+    
+    console.log('Highlighting killer death passage...');
+    
+    // Gray out all other revealed death passages
+    for (const deathPassage of this.deathPassages) {
+      if (deathPassage !== this.killerDeathPassage && deathPassage.render) {
+        // Only gray out if they were previously visible (revealed)
+        if (deathPassage.render.fillStyle !== 'transparent') {
+          deathPassage.render.fillStyle = 'rgba(128, 128, 128, 0.3)'; // Gray with low opacity
+          deathPassage.render.strokeStyle = 'rgba(160, 160, 160, 0.4)';
+          deathPassage.render.lineWidth = 2;
+        }
+      }
+    }
+    
+    // The killer death passage will be handled by updateKillerDeathPassageFlash
+    console.log('All other death passages grayed out');
+  }
+
+  private updateKillerDeathPassageFlash(currentTime: number) {
+    if (!this.killerDeathPassage || !this.killerDeathPassage.render) return;
+    
+    // Create dramatic red flashing effect for the killer passage
+    const flashSpeed = 800; // Faster flashing for dramatic effect
+    const cycle = (currentTime / flashSpeed) % 1;
+    const intensity = (Math.sin(cycle * Math.PI * 2) * 0.5 + 0.5); // Oscillate between 0 and 1
+    
+    // Bright red flashing
+    const red = 255;
+    const green = Math.floor(intensity * 100); // Some green for variation
+    const blue = Math.floor(intensity * 100); // Some blue for variation
+    const alpha = 0.8 + (intensity * 0.2); // High opacity with slight variation
+    
+    this.killerDeathPassage.render.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+    this.killerDeathPassage.render.strokeStyle = `rgba(255, ${Math.floor(intensity * 150)}, ${Math.floor(intensity * 150)}, 1)`;
+    this.killerDeathPassage.render.lineWidth = 4 + (intensity * 2); // Pulsing line width
   }
 }
