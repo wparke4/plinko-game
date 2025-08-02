@@ -71,6 +71,7 @@ export default class PlinkoEngine {
   private celebrationStartTime: number = 0;
   private celebrationDuration: number = 2000; // 2 seconds
   private celebratingBall: Matter.Body | null = null;
+  private isCashOutComplete: boolean = false; // New state for when celebration is done but game not reset
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -99,8 +100,12 @@ export default class PlinkoEngine {
       if (event.code === 'Space' && !event.repeat) {
         event.preventDefault(); // Prevent page scrolling
         
+        // If cash out is complete, reset for new game
+        if (this.isCashOutComplete) {
+          this.resetGame();
+        }
         // If game is in progress, cash out. Otherwise, drop a ball.
-        if (this.isGameInProgress()) {
+        else if (this.isGameInProgress()) {
           this.cashOut();
         } else {
           this.dropBall();
@@ -1004,6 +1009,11 @@ export default class PlinkoEngine {
     this.trackedBall = null;
     this.isCameraTracking = false;
     
+    // Reset cash out state
+    this.isCashOutComplete = false;
+    this.isCashOutCelebrating = false;
+    this.celebratingBall = null;
+    
     // Reset multiplier flashing
     isMultiplierFlashing.set(false);
 
@@ -1034,6 +1044,11 @@ export default class PlinkoEngine {
     return this.isGameDead;
   }
 
+  // Add method to check if cash out is complete and waiting for reset
+  public getIsCashOutComplete(): boolean {
+    return this.isCashOutComplete;
+  }
+
   // Add reset method to allow starting a new game
   public resetGame() {
     console.log('Resetting game...');
@@ -1041,6 +1056,11 @@ export default class PlinkoEngine {
     // Clear explosion state first
     this.isGameDead = false;
     this.explosionStartTime = 0;
+    
+    // Reset cash out state
+    this.isCashOutComplete = false;
+    this.isCashOutCelebrating = false;
+    this.celebratingBall = null;
     
     // Remove explosion particles if any
     if (this.explosionParticles.length > 0) {
@@ -1159,8 +1179,8 @@ export default class PlinkoEngine {
     const progress = elapsed / this.celebrationDuration;
 
     if (progress >= 1) {
-      // Celebration complete - clean up and reset
-      this.finishCashOutCelebration();
+      // Celebration effects complete - stop celebrating but don't reset game yet
+      this.finishCashOutEffects();
     } else {
       // Update green flash effects
       this.updateCashOutEffects(progress);
@@ -1194,8 +1214,8 @@ export default class PlinkoEngine {
     }
   }
 
-  private finishCashOutCelebration() {
-    console.log('Finishing cash out celebration...');
+  private finishCashOutEffects() {
+    console.log('Finishing cash out effects...');
     
     // Reset celebration state
     this.isCashOutCelebrating = false;
@@ -1209,8 +1229,10 @@ export default class PlinkoEngine {
       this.render.options.background = 'transparent';
     }
     
-    // Now do the cleanup that was originally in cashOut()
-    this.completeCashOut();
+    // Set flag that cash out is complete and waiting for player to start new game
+    this.isCashOutComplete = true;
+    
+    console.log('Cash out effects finished. Press spacebar or reset button to start new game.');
   }
 
   private completeCashOut() {
