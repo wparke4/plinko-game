@@ -45,6 +45,11 @@ export default class PlinkoEngine {
   private deathPassages: Matter.Body[] = [];
   private rowDeathPassages: Map<number, Matter.Body> = new Map(); // Y position to death passage mapping
   
+  // Death passage visibility management
+  private revealedRows: Set<number> = new Set(); // Track which rows have been revealed
+  private flashingRows: Map<number, { startTime: number, duration: number }> = new Map(); // Track flashing animations
+  private lastPlayerRowY: number = 0; // Track the last row the player was at
+  
   // Camera tracking properties
   private cameraY: number = 0;
   private highestCameraY: number = 0; // Track the highest (smallest) Y position
@@ -110,6 +115,7 @@ export default class PlinkoEngine {
       this.limitBallVelocities();
       this.handleBallWrapping();
       this.updateExplosionParticles();
+      this.updateFlashAnimations();
     });
 
     // Setup collision detection for death passages
@@ -247,7 +253,7 @@ export default class PlinkoEngine {
       passageX = PADDING_X + (deathPassageIndex * pinSpacing) + (pinSpacing / 2);
     }
     
-    // Create the death passage body (horizontal laser) - positioned at the same level as the pegs
+    // Create the death passage body (horizontal laser) - initially invisible
     const deathPassage = Matter.Bodies.rectangle(
       passageX,
       rowY,
@@ -257,9 +263,9 @@ export default class PlinkoEngine {
         isStatic: true,
         isSensor: true, // Make it a sensor so balls pass through but we can detect collision
         render: {
-          fillStyle: '#ff0044', // Bright neon red
-          strokeStyle: '#ff6666',
-          lineWidth: 3,
+          fillStyle: 'transparent', // Start invisible
+          strokeStyle: 'transparent',
+          lineWidth: 0,
         },
         collisionFilter: {
           category: DEATH_PASSAGE_CATEGORY,
@@ -383,6 +389,110 @@ export default class PlinkoEngine {
     }
   }
 
+  private checkForNewRowReached(ballY: number) {
+    if (!this.startingRowY) return;
+    
+    // Calculate which row the ball is currently at
+    const currentRowIndex = Math.floor((ballY - this.startingRowY) / PlinkoEngine.ROW_HEIGHT);
+    const currentRowY = this.startingRowY + (currentRowIndex * PlinkoEngine.ROW_HEIGHT);
+    
+    // Check if this is a new row that hasn't been revealed yet
+    if (currentRowIndex >= 0 && !this.revealedRows.has(currentRowY) && currentRowY !== this.lastPlayerRowY) {
+      this.revealedRows.add(currentRowY);
+      this.lastPlayerRowY = currentRowY;
+      
+      // Start flash animation for this row
+      this.startFlashAnimation(currentRowY);
+      
+      console.log('New row reached:', {
+        ballY,
+        currentRowIndex,
+        currentRowY,
+        startingRowY: this.startingRowY
+      });
+    }
+  }
+
+  private startFlashAnimation(rowY: number) {
+    const flashDuration = 1500; // 1.5 seconds flash animation
+    const currentTime = Date.now();
+    
+    this.flashingRows.set(rowY, {
+      startTime: currentTime,
+      duration: flashDuration
+    });
+    
+    console.log('Starting flash animation for row:', rowY);
+  }
+
+  private updateFlashAnimations() {
+    const currentTime = Date.now();
+    
+    for (const [rowY, flashData] of this.flashingRows.entries()) {
+      const elapsed = currentTime - flashData.startTime;
+      const progress = elapsed / flashData.duration;
+      
+      if (progress >= 1) {
+        // Animation complete - remove from flashing rows and show final state
+        this.flashingRows.delete(rowY);
+        this.setDeathPassageFinalVisibility(rowY);
+      } else {
+        // Update flash animation
+        this.updateFlashVisibility(rowY, progress);
+      }
+    }
+  }
+
+  private updateFlashVisibility(rowY: number, progress: number) {
+    const deathPassage = this.rowDeathPassages.get(rowY);
+    if (!deathPassage || !deathPassage.render) return;
+    
+    // Create pulsing flash effect with multiple cycles
+    const flashCycles = 4; // Number of flash cycles during the animation
+    const cycleProgress = (progress * flashCycles) % 1;
+    const flashIntensity = Math.sin(cycleProgress * Math.PI * 2) * 0.5 + 0.5; // Oscillate between 0 and 1
+    
+    // Start with white flash and transition to red
+    let red, green, blue, alpha;
+    
+    if (progress < 0.3) {
+      // Initial bright white flash
+      red = 255;
+      green = 255;
+      blue = 255;
+      alpha = flashIntensity * 0.9;
+    } else if (progress < 0.7) {
+      // Transition to red
+      const transitionProgress = (progress - 0.3) / 0.4;
+      red = 255;
+      green = Math.floor(255 * (1 - transitionProgress));
+      blue = Math.floor(255 * (1 - transitionProgress));
+      alpha = flashIntensity * 0.8;
+    } else {
+      // Final red flash before revealing
+      red = 255;
+      green = Math.floor(68 * flashIntensity); // Dim red
+      blue = Math.floor(68 * flashIntensity);
+      alpha = flashIntensity * 0.7;
+    }
+    
+    deathPassage.render.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+    deathPassage.render.strokeStyle = `rgba(${Math.min(255, red + 50)}, ${Math.min(255, green + 50)}, ${Math.min(255, blue + 50)}, ${alpha})`;
+    deathPassage.render.lineWidth = 3;
+  }
+
+  private setDeathPassageFinalVisibility(rowY: number) {
+    const deathPassage = this.rowDeathPassages.get(rowY);
+    if (!deathPassage || !deathPassage.render) return;
+    
+    // Set final visible state - bright neon red
+    deathPassage.render.fillStyle = '#ff0044';
+    deathPassage.render.strokeStyle = '#ff6666';
+    deathPassage.render.lineWidth = 3;
+    
+    console.log('Death passage revealed for row:', rowY);
+  }
+
   start() {
     Matter.Runner.run(this.runner, this.engine);
     Matter.Render.run(this.render);
@@ -411,6 +521,9 @@ export default class PlinkoEngine {
 
     // Get the ball's vertical position
     const ballY = this.trackedBall.position.y;
+
+    // Check if player has reached a new row and trigger flash animation
+    this.checkForNewRowReached(ballY);
 
     // Update multiplier based on rows passed
     if (this.startingRowY !== null) {
@@ -460,6 +573,14 @@ export default class PlinkoEngine {
       // Reset multiplier when ball goes too far
       this.currentMultiplier = 1.0;
       currentMultiplier.set(this.currentMultiplier);
+      
+      // Reset revelation tracking
+      this.revealedRows.clear();
+      this.flashingRows.clear();
+      this.lastPlayerRowY = 0;
+      
+      // Hide all death passages again
+      this.hideAllDeathPassages();
     }
   }
 
@@ -580,6 +701,11 @@ export default class PlinkoEngine {
     this.startingRowY = PlinkoEngine.PADDING_TOP; // Set to first row of pins instead of ready ball position
     console.log('Starting row Y set to:', this.startingRowY);
 
+    // Reset revelation tracking for new game
+    this.revealedRows.clear();
+    this.flashingRows.clear();
+    this.lastPlayerRowY = 0;
+
     // Deduct bet amount from balance
     balance.update((b) => b - currentBetAmount);
 
@@ -637,6 +763,15 @@ export default class PlinkoEngine {
         // Reset multiplier when game ends
         this.currentMultiplier = 1.0;
         currentMultiplier.set(this.currentMultiplier);
+        
+        // Reset revelation tracking
+        this.revealedRows.clear();
+        this.flashingRows.clear();
+        this.lastPlayerRowY = 0;
+        
+        // Hide all death passages again
+        this.hideAllDeathPassages();
+        
         // Create a new ready ball for the next game
         this.createReadyBall();
       }
@@ -717,6 +852,14 @@ export default class PlinkoEngine {
     this.currentMultiplier = 1.0;
     currentMultiplier.set(this.currentMultiplier);
     this.startingRowY = null;
+
+    // Reset revelation tracking
+    this.revealedRows.clear();
+    this.flashingRows.clear();
+    this.lastPlayerRowY = 0;
+    
+    // Hide all death passages again
+    this.hideAllDeathPassages();
 
     // Reset camera view to initial position
     Matter.Render.lookAt(this.render, {
@@ -916,6 +1059,14 @@ export default class PlinkoEngine {
     currentMultiplier.set(this.currentMultiplier);
     this.startingRowY = null;
     
+    // Reset revelation tracking
+    this.revealedRows.clear();
+    this.flashingRows.clear();
+    this.lastPlayerRowY = 0;
+    
+    // Hide all death passages again
+    this.hideAllDeathPassages();
+    
     // Reset camera view to initial position
     Matter.Render.lookAt(this.render, {
       min: { x: 0, y: 0 },
@@ -926,5 +1077,15 @@ export default class PlinkoEngine {
     this.createReadyBall();
     
     console.log('Game reset complete - ready for new game!');
+  }
+
+  private hideAllDeathPassages() {
+    for (const deathPassage of this.deathPassages) {
+      if (deathPassage.render) {
+        deathPassage.render.fillStyle = 'transparent';
+        deathPassage.render.strokeStyle = 'transparent';
+        deathPassage.render.lineWidth = 0;
+      }
+    }
   }
 }
