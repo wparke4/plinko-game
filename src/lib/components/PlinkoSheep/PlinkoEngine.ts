@@ -465,8 +465,8 @@ export default class PlinkoEngine {
     const deathPassage = this.rowDeathPassages.get(rowY);
     if (!deathPassage || !deathPassage.render) return;
     
-    // Create pulsing flash effect with multiple cycles
-    const flashCycles = 4; // Number of flash cycles during the animation
+    // Create pulsing flash effect with fewer cycles to maintain same flash rate
+    const flashCycles = 2; // Reduced from 4 to maintain same flash speed with shorter duration
     const cycleProgress = (progress * flashCycles) % 1;
     const flashIntensity = Math.sin(cycleProgress * Math.PI * 2) * 0.5 + 0.5; // Oscillate between 0 and 1
     
