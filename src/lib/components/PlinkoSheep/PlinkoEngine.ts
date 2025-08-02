@@ -868,6 +868,9 @@ export default class PlinkoEngine {
     // Stop camera tracking immediately - game is paused during celebration
     this.isCameraTracking = false;
     
+    // Reveal all visible death passages in grayed out state
+    this.revealAllDeathPassagesGrayed();
+    
     // Start multiplier flashing for UI feedback
     isMultiplierFlashing.set(true);
 
@@ -1248,5 +1251,28 @@ export default class PlinkoEngine {
     this.createReadyBall();
 
     console.log('Cash out complete');
+  }
+
+  private revealAllDeathPassagesGrayed() {
+    console.log('Revealing all visible death passages in grayed out state...');
+    
+    // Stop all flash animations immediately when player cashes out
+    this.flashingRows.clear();
+    
+    // Calculate current viewport bounds
+    const viewportTop = this.cameraY;
+    const viewportBottom = this.cameraY + PlinkoEngine.HEIGHT;
+    
+    // Reveal only death passages that are currently visible on screen
+    for (const [rowY, deathPassage] of this.rowDeathPassages.entries()) {
+      // Check if this death passage is within the current viewport
+      if (rowY >= viewportTop && rowY <= viewportBottom && deathPassage.render) {
+        deathPassage.render.fillStyle = 'rgba(128, 128, 128, 0.4)'; // Gray with moderate opacity
+        deathPassage.render.strokeStyle = 'rgba(160, 160, 160, 0.5)';
+        deathPassage.render.lineWidth = 2;
+      }
+    }
+    
+    console.log(`Revealed ${Array.from(this.rowDeathPassages.entries()).filter(([rowY]) => rowY >= viewportTop && rowY <= viewportBottom).length} death passages on screen`);
   }
 }
