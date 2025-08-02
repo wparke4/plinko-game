@@ -543,10 +543,10 @@ export default class PlinkoEngine {
     // Check if player has reached a new row and trigger flash animation
     this.checkForNewRowReached(ballY);
 
-    // Update multiplier based on rows passed
+    // Update multiplier based on risk calculation for rows passed
     if (this.startingRowY !== null) {
       const rowsPassed = Math.floor((ballY - this.startingRowY) / PlinkoEngine.ROW_HEIGHT);
-      const newMultiplier = Math.max(1.0, Math.pow(1.04, rowsPassed)); // Start at 1.0x, increase by 4% each row
+      const newMultiplier = this.calculateRiskBasedMultiplier(rowsPassed);
       
       // Only update if the multiplier has changed
       if (newMultiplier !== this.currentMultiplier) {
@@ -1027,6 +1027,49 @@ export default class PlinkoEngine {
     // The explosion will remain visible until they reset.
 
     console.log('Death explosion created - player must manually reset');
+  }
+
+  // Calculate risk-based multiplier based on survival probability
+  private calculateRiskBasedMultiplier(rowsPassed: number): number {
+    if (rowsPassed <= 0) {
+      return 1.0;
+    }
+    
+    let totalMultiplier = 1.0;
+    
+    for (let row = 0; row < rowsPassed; row++) {
+      // Determine if this row is offset (odd rows are offset)
+      const isOffset = row % 2 === 1;
+      
+      let pinsInRow: number;
+      let passagesInRow: number;
+      
+      if (isOffset) {
+        // Offset rows have one less pin
+        pinsInRow = PlinkoEngine.PINS_PER_ROW - 1; // 22 pins
+        passagesInRow = pinsInRow - 1; // 21 passages
+      } else {
+        // Normal rows have full pin count
+        pinsInRow = PlinkoEngine.PINS_PER_ROW; // 23 pins  
+        passagesInRow = pinsInRow - 1; // 22 passages
+      }
+      
+      // Each row has exactly 1 death passage out of all passages
+      const deathPassages = 1;
+      const safePassages = passagesInRow - deathPassages;
+      
+      // Survival probability = safe passages / total passages
+      const survivalProbability = safePassages / passagesInRow;
+      
+      // Multiplier for this row = 1 / survival probability
+      const rowMultiplier = 1 / survivalProbability;
+      
+      // Accumulate the total multiplier
+      totalMultiplier *= rowMultiplier;
+    }
+    
+    // Round to 2 decimal places for display consistency
+    return Math.max(1.0, parseFloat(totalMultiplier.toFixed(2)));
   }
 
   // Add getter for multiplier
