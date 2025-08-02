@@ -1,5 +1,5 @@
 import Matter from 'matter-js';
-import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory, currentMultiplier } from '$lib/stores/game';
+import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory, currentMultiplier, isMultiplierFlashing } from '$lib/stores/game';
 import { RiskLevel, type RowCount } from '$lib/types';
 import { get } from 'svelte/store';
 
@@ -66,6 +66,12 @@ export default class PlinkoEngine {
   private explosionStartTime: number = 0;
   private explosionDuration: number = 3000; // 3 seconds
 
+  // Cash out celebration properties
+  private isCashOutCelebrating: boolean = false;
+  private celebrationStartTime: number = 0;
+  private celebrationDuration: number = 2000; // 2 seconds
+  private celebratingBall: Matter.Body | null = null;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.engine = Matter.Engine.create({
@@ -116,6 +122,7 @@ export default class PlinkoEngine {
       this.limitBallVelocities();
       this.handleBallWrapping();
       this.updateExplosionParticles();
+      this.updateCashOutCelebration();
       this.updateFlashAnimations();
     });
 
@@ -846,41 +853,25 @@ export default class PlinkoEngine {
       return [...history, newTotal];
     });
 
-    // Remove the tracked ball and clean up
-    Matter.Composite.remove(this.engine.world, this.trackedBall);
-    this.activeBalls.delete(this.trackedBall);
-    betAmountOfExistingBalls.update((balls) => {
-      const updated = { ...balls };
-      delete updated[this.trackedBall!.id];
-      return updated;
-    });
-
-    // Reset game state
-    this.trackedBall = null;
-    this.isCameraTracking = false;
-    this.currentMultiplier = 1.0;
-    currentMultiplier.set(this.currentMultiplier);
-    this.startingRowY = null;
-
-    // Reset revelation tracking
-    this.revealedRows.clear();
-    this.flashingRows.clear();
-    this.lastPlayerRowY = 0;
-    this.killerDeathPassage = null;
+    // Set celebration state
+    this.isCashOutCelebrating = true;
+    this.celebrationStartTime = Date.now();
+    this.celebratingBall = this.trackedBall; // Celebrate the ball that just won
     
-    // Hide all death passages again
-    this.hideAllDeathPassages();
+    // Freeze the ball immediately by making it static
+    if (this.celebratingBall) {
+      Matter.Body.setStatic(this.celebratingBall, true);
+      // Also zero out any velocity to ensure it stops completely
+      Matter.Body.setVelocity(this.celebratingBall, { x: 0, y: 0 });
+    }
+    
+    // Stop camera tracking immediately - game is paused during celebration
+    this.isCameraTracking = false;
+    
+    // Start multiplier flashing for UI feedback
+    isMultiplierFlashing.set(true);
 
-    // Reset camera view to initial position
-    Matter.Render.lookAt(this.render, {
-      min: { x: 0, y: 0 },
-      max: { x: PlinkoEngine.WIDTH, y: PlinkoEngine.HEIGHT }
-    });
-
-    // Create a new ready ball
-    this.createReadyBall();
-
-    console.log('Cash out complete');
+    console.log('Cash out celebration started - ball frozen in place.');
   }
 
   private limitBallVelocities() {
@@ -1009,6 +1000,9 @@ export default class PlinkoEngine {
     // Clear the tracked ball reference before creating explosion
     this.trackedBall = null;
     this.isCameraTracking = false;
+    
+    // Reset multiplier flashing
+    isMultiplierFlashing.set(false);
 
     // CREATE THE EXPLOSION! 🎆💥
     this.createExplosion(explosionX, explosionY);
@@ -1072,6 +1066,9 @@ export default class PlinkoEngine {
     this.currentMultiplier = 1.0;
     currentMultiplier.set(this.currentMultiplier);
     this.startingRowY = null;
+    
+    // Reset multiplier flashing
+    isMultiplierFlashing.set(false);
     
     // Reset revelation tracking
     this.revealedRows.clear();
@@ -1150,5 +1147,106 @@ export default class PlinkoEngine {
     this.killerDeathPassage.render.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha})`;
     this.killerDeathPassage.render.strokeStyle = `rgba(255, ${Math.floor(intensity * 150)}, ${Math.floor(intensity * 150)}, 1)`;
     this.killerDeathPassage.render.lineWidth = 4 + (intensity * 2); // Pulsing line width
+  }
+
+  private updateCashOutCelebration() {
+    if (!this.isCashOutCelebrating) return;
+    
+    const elapsed = Date.now() - this.celebrationStartTime;
+    const progress = elapsed / this.celebrationDuration;
+
+    if (progress >= 1) {
+      // Celebration complete - clean up and reset
+      this.finishCashOutCelebration();
+    } else {
+      // Update green flash effects
+      this.updateCashOutEffects(progress);
+    }
+  }
+
+  private updateCashOutEffects(progress: number) {
+    if (!this.celebratingBall || !this.celebratingBall.render) return;
+    
+    // Create pulsing green effect for the ball
+    const pulse = Math.sin(progress * Math.PI * 8) * 0.5 + 0.5; // Fast pulsing
+    const greenIntensity = 100 + (pulse * 155); // Green from 100 to 255
+    
+    // Make ball flash bright green
+    this.celebratingBall.render.fillStyle = `rgb(0, ${Math.floor(greenIntensity)}, 0)`;
+    this.celebratingBall.render.strokeStyle = '#00ff00';
+    this.celebratingBall.render.lineWidth = 3 + (pulse * 2);
+    
+    // Add screen-wide green pulse effect
+    this.updateScreenGreenPulse(progress, pulse);
+  }
+
+  private updateScreenGreenPulse(progress: number, pulse: number) {
+    // Create screen-wide green overlay effect by manipulating render background
+    const greenAlpha = (pulse * 0.15) * (1 - progress); // Fade out over time
+    const greenOverlay = `rgba(0, 255, 0, ${greenAlpha})`;
+    
+    // Apply green tint to the render background temporarily
+    if (this.render.options) {
+      this.render.options.background = greenOverlay;
+    }
+  }
+
+  private finishCashOutCelebration() {
+    console.log('Finishing cash out celebration...');
+    
+    // Reset celebration state
+    this.isCashOutCelebrating = false;
+    this.celebratingBall = null;
+    
+    // Stop multiplier flashing
+    isMultiplierFlashing.set(false);
+
+    // Reset render background
+    if (this.render.options) {
+      this.render.options.background = 'transparent';
+    }
+    
+    // Now do the cleanup that was originally in cashOut()
+    this.completeCashOut();
+  }
+
+  private completeCashOut() {
+    // Remove the tracked ball if it still exists
+    if (this.trackedBall) {
+      Matter.Composite.remove(this.engine.world, this.trackedBall);
+      this.activeBalls.delete(this.trackedBall);
+      betAmountOfExistingBalls.update((balls) => {
+        const updated = { ...balls };
+        delete updated[this.trackedBall!.id];
+        return updated;
+      });
+    }
+
+    // Reset game state
+    this.trackedBall = null;
+    this.isCameraTracking = false;
+    this.currentMultiplier = 1.0;
+    currentMultiplier.set(this.currentMultiplier);
+    this.startingRowY = null;
+
+    // Reset revelation tracking
+    this.revealedRows.clear();
+    this.flashingRows.clear();
+    this.lastPlayerRowY = 0;
+    this.killerDeathPassage = null;
+    
+    // Hide all death passages again
+    this.hideAllDeathPassages();
+
+    // Reset camera view to initial position
+    Matter.Render.lookAt(this.render, {
+      min: { x: 0, y: 0 },
+      max: { x: PlinkoEngine.WIDTH, y: PlinkoEngine.HEIGHT }
+    });
+
+    // Create a new ready ball
+    this.createReadyBall();
+
+    console.log('Cash out complete');
   }
 }

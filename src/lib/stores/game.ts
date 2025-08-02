@@ -53,6 +53,9 @@ export const balance = writable<number>(DEFAULT_BALANCE);
 // Current multiplier during active gameplay (for Plinko Crash mode)
 export const currentMultiplier = writable<number>(0);
 
+// Multiplier flash state for cash out celebration feedback
+export const isMultiplierFlashing = writable<boolean>(false);
+
 /**
  * RGB colors for every bin. The length of the array is the number of bins.
  */
