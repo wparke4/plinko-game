@@ -1102,6 +1102,10 @@ export default class PlinkoEngine {
     // Hide all death passages again
     this.hideAllDeathPassages();
     
+    // Clear and regenerate all pins and death passages with new random positions
+    this.clearExistingPins();
+    this.placePinsAndWalls();
+    
     // Reset camera view to initial position
     Matter.Render.lookAt(this.render, {
       min: { x: 0, y: 0 },
