@@ -11,7 +11,7 @@
 
 <style>
   .multiplier {
-    font-size: 1.5rem;
+    font-size: 2.5rem;
     font-weight: bold;
     color: white;
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
