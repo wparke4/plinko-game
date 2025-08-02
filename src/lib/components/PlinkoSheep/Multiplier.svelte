@@ -26,12 +26,12 @@
   @keyframes greenPulse {
     0% {
       color: #00ff00;
-      text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00, 0 0 30px #00ff00;
+      text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00, 0 0 15px #00ff00;
       transform: scale(1.1);
     }
     100% {
       color: #88ff88;
-      text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00, 0 0 15px #00ff00;
+      text-shadow: 0 0 3px #00ff00, 0 0 6px #00ff00, 0 0 9px #00ff00;
       transform: scale(1.2);
     }
   }

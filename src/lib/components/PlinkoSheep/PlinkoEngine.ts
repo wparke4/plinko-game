@@ -427,7 +427,7 @@ export default class PlinkoEngine {
   }
 
   private startFlashAnimation(rowY: number) {
-    const flashDuration = 1500; // 1.5 seconds flash animation
+    const flashDuration = 800; // Reduced from 1500ms to 800ms for faster flash
     const currentTime = Date.now();
     
     this.flashingRows.set(rowY, {
