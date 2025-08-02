@@ -1109,11 +1109,19 @@ export default class PlinkoEngine {
     
     console.log('Highlighting killer death passage...');
     
+    // Stop all flash animations immediately when player dies
+    this.flashingRows.clear();
+    
     // Gray out all other revealed death passages
     for (const deathPassage of this.deathPassages) {
       if (deathPassage !== this.killerDeathPassage && deathPassage.render) {
-        // Only gray out if they were previously visible (revealed)
-        if (deathPassage.render.fillStyle !== 'transparent') {
+        // Gray out all revealed passages (check if they were revealed by looking at revealed rows)
+        const isRevealed = Array.from(this.revealedRows).some(rowY => {
+          const rowDeathPassage = this.rowDeathPassages.get(rowY);
+          return rowDeathPassage === deathPassage;
+        });
+        
+        if (isRevealed) {
           deathPassage.render.fillStyle = 'rgba(128, 128, 128, 0.3)'; // Gray with low opacity
           deathPassage.render.strokeStyle = 'rgba(160, 160, 160, 0.4)';
           deathPassage.render.lineWidth = 2;
@@ -1122,7 +1130,7 @@ export default class PlinkoEngine {
     }
     
     // The killer death passage will be handled by updateKillerDeathPassageFlash
-    console.log('All other death passages grayed out');
+    console.log('All other death passages grayed out, flash animations stopped');
   }
 
   private updateKillerDeathPassageFlash(currentTime: number) {
