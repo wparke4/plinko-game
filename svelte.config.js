@@ -10,6 +10,10 @@ const config = {
   kit: {
     // Static site generation (SSG) is used: https://kit.svelte.dev/docs/adapter-static
     adapter: adapter({
+      pages: 'public',
+      assets: 'public',
+      fallback: undefined,
+      precompress: false,
       strict: false,
     }),
   },
