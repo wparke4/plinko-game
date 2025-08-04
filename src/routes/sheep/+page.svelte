@@ -3,11 +3,20 @@
   import PlinkoSheep from '$lib/components/PlinkoSheep';
   import SettingsWindow from '$lib/components/SettingsWindow';
   import { setBalanceFromLocalStorage, writeBalanceToLocalStorage } from '$lib/utils/game';
+  import { plinkoEngine, riskLevel } from '$lib/stores/game';
+  import { RiskLevel } from '$lib/types';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
 
   $effect(() => {
     setBalanceFromLocalStorage();
+  });
+
+  // Update engine when risk level changes
+  $effect(() => {
+    if ($plinkoEngine && $riskLevel) {
+      $plinkoEngine.setRiskLevel($riskLevel);
+    }
   });
 
   const gameTypes = [
@@ -16,15 +25,46 @@
     { value: '/sheep', label: 'Crash' }
   ];
 
+  const riskLevels = [
+    { value: RiskLevel.LOW, label: 'Low', pins: '25 pins', description: 'Lower risk, safer gameplay' },
+    { value: RiskLevel.MEDIUM, label: 'Medium', pins: '23 pins', description: 'Balanced risk and reward' },
+    { value: RiskLevel.HIGH, label: 'High', pins: '15 pins', description: 'Higher risk, higher multipliers' },
+  ];
+
+  let isGameInProgress = $derived($plinkoEngine?.isGameInProgress() ?? false);
+
   function handleGameChange(path: string) {
     goto(path);
+  }
+
+  function handleRiskChange(newRisk: RiskLevel) {
+    riskLevel.set(newRisk);
   }
 </script>
 
 <svelte:window onbeforeunload={writeBalanceToLocalStorage} />
 
 <div class="relative flex min-h-dvh w-full flex-col bg-gray-900">
-  <div class="absolute top-4 right-4 z-10">
+  <!-- Top Navigation Bar -->
+  <div class="absolute top-4 left-4 right-4 z-10 flex items-center justify-between">
+    <!-- Risk Level Selector -->
+    <div class="flex flex-col gap-1">
+      <label class="text-xs font-medium text-slate-400">Risk Level</label>
+      <div class="flex gap-1 rounded-full bg-slate-900 p-0.5">
+        {#each riskLevels as { value, label, pins }}
+          <button
+            onclick={() => handleRiskChange(value)}
+            disabled={isGameInProgress}
+            class="rounded-full py-1 px-3 text-xs font-medium text-white transition hover:not-disabled:bg-slate-600 active:not-disabled:bg-slate-500 disabled:cursor-not-allowed disabled:opacity-50 {$riskLevel === value ? 'bg-slate-600' : ''} flex flex-col items-center"
+          >
+            <span>{label}</span>
+            <span class="text-xs opacity-75">{pins}</span>
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    <!-- Game Mode Selector -->
     <div class="flex gap-1 rounded-full bg-slate-900 p-0.5">
       {#each gameTypes as { value, label }}
         <button

@@ -20,10 +20,8 @@
     };
   };
 
-  let isBetAmountNegative = $derived($betAmount < 0);
-  let isBetExceedBalance = $derived($betAmount > $balance);
   let isDropBallDisabled = $derived(
-    $plinkoEngine === null || isBetAmountNegative || isBetExceedBalance
+    $plinkoEngine === null
   );
   let isGameInProgress = $derived($plinkoEngine?.isGameInProgress() ?? false);
 
@@ -49,6 +47,7 @@
       </canvas>
     </div>
     <div class="mt-4 flex flex-col items-center gap-4 pb-4">
+
       <div class="multiplier-container">
         <Multiplier multiplier={$currentMultiplier} />
       </div>

@@ -2,7 +2,7 @@ import { RiskLevel } from '$lib/types';
 import { getBinColors } from '$lib/utils/colors';
 import { computeBinProbabilities } from '$lib/utils/numbers';
 
-export const DEFAULT_BALANCE = 200;
+export const DEFAULT_BALANCE = 10000;
 
 export const LOCAL_STORAGE_KEY = {
   BALANCE: 'plinko_balance',

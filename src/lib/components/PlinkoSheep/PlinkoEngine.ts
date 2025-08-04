@@ -1,5 +1,5 @@
 import Matter from 'matter-js';
-import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory, currentMultiplier, isMultiplierFlashing } from '$lib/stores/game';
+import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory, currentMultiplier, isMultiplierFlashing, riskLevel } from '$lib/stores/game';
 import { RiskLevel, type RowCount } from '$lib/types';
 import { get } from 'svelte/store';
 
@@ -19,10 +19,25 @@ export default class PlinkoEngine {
   static readonly ROW_HEIGHT = 35; // Reduced from 50 to fit more rows
   static readonly VIEWPORT_BUFFER = 2; // Number of screen heights to keep pins loaded above and below viewport
   static readonly TERMINAL_VELOCITY = 12; // Maximum fall speed for balls
-  static readonly PINS_PER_ROW = 23; // Increased from 21 to 22 pins per row
   static readonly READY_BALL_SPEED = 7; // Speed of the ready ball moving side to side
   static readonly DEATH_PASSAGE_WIDTH = 25; // Width of the horizontal death passage laser
   static readonly DEATH_PASSAGE_HEIGHT = 8; // Height of the horizontal death passage laser
+
+  // Risk-based pin configuration
+  private static readonly PINS_PER_ROW_CONFIG = {
+    [RiskLevel.MEDIUM]: 23,
+    [RiskLevel.HIGH]: 15,
+    [RiskLevel.LOW]: 25, // Safer gameplay with more pins but within canvas bounds
+  };
+
+  // Fixed pin spacing based on medium risk as reference
+  private static readonly REFERENCE_PIN_SPACING = 30; // pixels between pin centers
+  private static readonly BASE_PINS_PER_ROW = 23; // medium risk as reference
+
+  private currentRiskLevel: RiskLevel = RiskLevel.MEDIUM;
+  private currentPinsPerRow: number = 23;
+  private currentGameAreaWidth: number = 0;
+  private currentGameAreaPaddingX: number = 0;
 
   private engine: Matter.Engine;
   private render: Matter.Render;
@@ -75,6 +90,16 @@ export default class PlinkoEngine {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
+    
+    // Initialize risk level configuration with fallback
+    this.currentRiskLevel = RiskLevel.MEDIUM;
+    this.currentPinsPerRow = PlinkoEngine.PINS_PER_ROW_CONFIG[RiskLevel.MEDIUM];
+    this.currentGameAreaWidth = (this.currentPinsPerRow - 1) * PlinkoEngine.REFERENCE_PIN_SPACING;
+    this.currentGameAreaPaddingX = (PlinkoEngine.WIDTH - this.currentGameAreaWidth) / 2;
+    
+    // Try to get actual risk level from store
+    this.updateRiskLevel();
+    
     this.engine = Matter.Engine.create({
       gravity: {
         x: 0,
@@ -122,7 +147,6 @@ export default class PlinkoEngine {
 
     // Setup camera update and velocity limiting
     Matter.Events.on(this.engine, 'beforeUpdate', () => {
-      console.log('Engine update tick');
       this.updateCamera();
       this.limitBallVelocities();
       this.handleBallWrapping();
@@ -137,8 +161,58 @@ export default class PlinkoEngine {
     });
   }
 
+  private updateRiskLevel() {
+    const currentRisk = get(riskLevel);
+    this.currentRiskLevel = currentRisk;
+    this.currentPinsPerRow = PlinkoEngine.PINS_PER_ROW_CONFIG[currentRisk];
+    
+    // Calculate game area dimensions based on fixed pin spacing
+    this.currentGameAreaWidth = (this.currentPinsPerRow - 1) * PlinkoEngine.REFERENCE_PIN_SPACING;
+    this.currentGameAreaPaddingX = (PlinkoEngine.WIDTH - this.currentGameAreaWidth) / 2;
+    
+    console.log('Risk level updated:', { 
+      risk: currentRisk, 
+      pinsPerRow: this.currentPinsPerRow,
+      gameAreaWidth: this.currentGameAreaWidth,
+      paddingX: this.currentGameAreaPaddingX
+    });
+  }
+
+  // Public method to update risk level and regenerate pins if needed
+  public setRiskLevel(newRiskLevel: RiskLevel) {
+    if (newRiskLevel !== this.currentRiskLevel) {
+      this.currentRiskLevel = newRiskLevel;
+      this.currentPinsPerRow = PlinkoEngine.PINS_PER_ROW_CONFIG[newRiskLevel];
+      
+      // Calculate game area dimensions based on fixed pin spacing
+      this.currentGameAreaWidth = (this.currentPinsPerRow - 1) * PlinkoEngine.REFERENCE_PIN_SPACING;
+      this.currentGameAreaPaddingX = (PlinkoEngine.WIDTH - this.currentGameAreaWidth) / 2;
+      
+      // Only regenerate pins if no game is in progress
+      if (!this.isGameInProgress()) {
+        this.resetGame();
+      } else {
+        // If game is in progress, just update the ready ball position for next game
+        // (the actual reset will happen when the current game ends)
+        console.log('Game in progress, will update on next reset');
+      }
+      
+      // Always recreate the ready ball with new dimensions if it exists
+      if (this.readyBall && !this.isGameInProgress()) {
+        this.createReadyBall();
+      }
+      
+      console.log('Risk level changed:', { 
+        risk: newRiskLevel, 
+        pinsPerRow: this.currentPinsPerRow,
+        gameAreaWidth: this.currentGameAreaWidth,
+        paddingX: this.currentGameAreaPaddingX
+      });
+    }
+  }
+
   private get pinDistanceX(): number {
-    return (this.canvas.width - PlinkoEngine.PADDING_X * 2) / (PlinkoEngine.PINS_PER_ROW - 1);
+    return PlinkoEngine.REFERENCE_PIN_SPACING;
   }
 
   private setupWorld() {
@@ -147,22 +221,25 @@ export default class PlinkoEngine {
 
   private handleBallWrapping() {
     const bodies = Matter.Composite.allBodies(this.engine.world);
+    const leftBoundary = this.currentGameAreaPaddingX;
+    const rightBoundary = this.currentGameAreaPaddingX + this.currentGameAreaWidth;
+    
     for (const body of bodies) {
-      // Only wrap ball positions
-      if (body.collisionFilter.category === PlinkoEngine.BALL_CATEGORY) {
+      // Only wrap ball positions, but exclude the ready ball
+      if (body.collisionFilter.category === PlinkoEngine.BALL_CATEGORY && body !== this.readyBall) {
         const position = body.position;
         
-        // Check if ball has gone off either side
-        if (position.x < 0) {
+        // Check if ball has gone off either side of the game area
+        if (position.x < leftBoundary) {
           // Wrap to right side
           Matter.Body.setPosition(body, {
-            x: PlinkoEngine.WIDTH,
+            x: rightBoundary,
             y: position.y
           });
-        } else if (position.x > PlinkoEngine.WIDTH) {
+        } else if (position.x > rightBoundary) {
           // Wrap to left side
           Matter.Body.setPosition(body, {
-            x: 0,
+            x: leftBoundary,
             y: position.y
           });
         }
@@ -203,17 +280,18 @@ export default class PlinkoEngine {
   }
 
     private createRowOfPins(rowY: number, pinCount: number, isOffset: boolean = false) {
-    const { PADDING_X, PIN_CATEGORY, BALL_CATEGORY, PINS_PER_ROW } = PlinkoEngine;
+    const { PIN_CATEGORY, BALL_CATEGORY, REFERENCE_PIN_SPACING } = PlinkoEngine;
     const rowPins: Matter.Body[] = [];
     
-    // Calculate the base X positions using fixed spacing
-    const pinSpacing = (this.canvas.width - PADDING_X * 2) / (PINS_PER_ROW - 1);
+    // Use fixed pin spacing and dynamic padding
+    const pinSpacing = REFERENCE_PIN_SPACING;
+    const paddingX = this.currentGameAreaPaddingX;
     
     // For offset rows, we'll create one less pin and shift everything right by half spacing
-    const effectivePinCount = isOffset ? PINS_PER_ROW - 1 : PINS_PER_ROW;
+    const effectivePinCount = isOffset ? this.currentPinsPerRow - 1 : this.currentPinsPerRow;
     
     for (let col = 0; col < effectivePinCount; ++col) {
-      let colX = PADDING_X + (pinSpacing * col);
+      let colX = paddingX + (pinSpacing * col);
       
       // Apply offset for alternating rows
       if (isOffset) {
@@ -245,13 +323,14 @@ export default class PlinkoEngine {
   }
 
   private createDeathPassage(rowY: number, isOffset: boolean) {
-    const { PADDING_X, PINS_PER_ROW, DEATH_PASSAGE_CATEGORY, BALL_CATEGORY, DEATH_PASSAGE_WIDTH, DEATH_PASSAGE_HEIGHT, PEG_RADIUS } = PlinkoEngine;
+    const { DEATH_PASSAGE_CATEGORY, BALL_CATEGORY, DEATH_PASSAGE_WIDTH, DEATH_PASSAGE_HEIGHT, PEG_RADIUS, REFERENCE_PIN_SPACING } = PlinkoEngine;
     
-    // Calculate pin spacing
-    const pinSpacing = (this.canvas.width - PADDING_X * 2) / (PINS_PER_ROW - 1);
+    // Use fixed pin spacing and dynamic padding
+    const pinSpacing = REFERENCE_PIN_SPACING;
+    const paddingX = this.currentGameAreaPaddingX;
     
     // Calculate number of passages (spaces between pins)
-    const numPassages = isOffset ? PINS_PER_ROW - 2 : PINS_PER_ROW - 1;
+    const numPassages = isOffset ? this.currentPinsPerRow - 2 : this.currentPinsPerRow - 1;
     
     // Randomly select a passage index
     const deathPassageIndex = Math.floor(Math.random() * numPassages);
@@ -260,10 +339,10 @@ export default class PlinkoEngine {
     let passageX: number;
     if (isOffset) {
       // For offset rows, passages are between offset pins
-      passageX = PADDING_X + (pinSpacing / 2) + (deathPassageIndex * pinSpacing) + (pinSpacing / 2);
+      passageX = paddingX + (pinSpacing / 2) + (deathPassageIndex * pinSpacing) + (pinSpacing / 2);
     } else {
       // For normal rows, passages are between regular pins
-      passageX = PADDING_X + (deathPassageIndex * pinSpacing) + (pinSpacing / 2);
+      passageX = paddingX + (deathPassageIndex * pinSpacing) + (pinSpacing / 2);
     }
     
     // Create the death passage body (horizontal laser) - initially invisible
@@ -620,7 +699,7 @@ export default class PlinkoEngine {
           const isOffset = rowIndex % 2 === 1;
           
           // Use the same pin count as the last row of the initial triangle
-          this.createRowOfPins(nextRowY, PlinkoEngine.PINS_PER_ROW, isOffset);
+          this.createRowOfPins(nextRowY, this.currentPinsPerRow, isOffset);
         }
         nextRowY += ROW_HEIGHT;
       }
@@ -654,8 +733,11 @@ export default class PlinkoEngine {
       Matter.Composite.remove(this.engine.world, this.readyBall);
     }
 
+    // Position the ready ball in the center of the current game area
+    const gameAreaCenterX = this.currentGameAreaPaddingX + (this.currentGameAreaWidth / 2);
+
     this.readyBall = Matter.Bodies.circle(
-      PlinkoEngine.WIDTH / 2,
+      gameAreaCenterX,
       PlinkoEngine.PADDING_TOP - 20, // Position ball 20 units above the first row of pegs
       PlinkoEngine.BALL_RADIUS,
       {
@@ -677,11 +759,13 @@ export default class PlinkoEngine {
     if (!this.readyBall) return;
 
     const currentX = this.readyBall.position.x;
+    const leftBoundary = this.currentGameAreaPaddingX;
+    const rightBoundary = this.currentGameAreaPaddingX + this.currentGameAreaWidth;
     
     // Change direction if reaching bounds
-    if (currentX >= PlinkoEngine.WIDTH - PlinkoEngine.PADDING_X) {
+    if (currentX >= rightBoundary) {
       this.readyBallDirection = -1;
-    } else if (currentX <= PlinkoEngine.PADDING_X) {
+    } else if (currentX <= leftBoundary) {
       this.readyBallDirection = 1;
     }
 
@@ -694,7 +778,6 @@ export default class PlinkoEngine {
 
   dropBall() {
     const currentBetAmount = get(betAmount);
-    const currentBalance = get(balance);
 
     // Prevent dropping balls if game is dead - player must reset first
     if (this.isGameDead) {
@@ -708,7 +791,7 @@ export default class PlinkoEngine {
       return;
     }
 
-    if (currentBetAmount <= 0 || currentBetAmount > currentBalance || !this.readyBall) {
+    if (!this.readyBall) {
       return;
     }
 
@@ -726,8 +809,7 @@ export default class PlinkoEngine {
     this.lastPlayerRowY = 0;
     this.killerDeathPassage = null;
 
-    // Deduct bet amount from balance
-    balance.update((b) => b - currentBetAmount);
+    // Balance system disabled - no deduction needed
 
     // Create ball at ready ball's position
     const startX = this.readyBall.position.x;
@@ -1046,12 +1128,12 @@ export default class PlinkoEngine {
       
       if (isOffset) {
         // Offset rows have one less pin
-        pinsInRow = PlinkoEngine.PINS_PER_ROW - 1; // 22 pins
-        passagesInRow = pinsInRow - 1; // 21 passages
+        pinsInRow = this.currentPinsPerRow - 1; // One less than current setting
+        passagesInRow = pinsInRow - 1; // Passages between pins
       } else {
         // Normal rows have full pin count
-        pinsInRow = PlinkoEngine.PINS_PER_ROW; // 23 pins  
-        passagesInRow = pinsInRow - 1; // 22 passages
+        pinsInRow = this.currentPinsPerRow; // Current pin setting
+        passagesInRow = pinsInRow - 1; // Passages between pins
       }
       
       // Each row has exactly 1 death passage out of all passages

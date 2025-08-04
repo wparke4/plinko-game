@@ -35,7 +35,7 @@
         onclick={() => ($balance = DEFAULT_BALANCE)}
         class="touch-manipulation self-start rounded-md bg-red-500 px-3 py-2 text-sm text-white transition-colors hover:bg-red-400 active:bg-red-600"
       >
-        Reset Balance
+        Reset Balance ($10,000)
       </button>
     </div>
   </DraggableWindow>
