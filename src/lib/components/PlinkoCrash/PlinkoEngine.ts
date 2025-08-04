@@ -67,6 +67,13 @@ export default class PlinkoEngine {
   private explosionStartTime: number = 0;
   private explosionDuration: number = 3000; // 3 seconds
 
+  // Cash out celebration properties
+  private isCashOutCelebrating: boolean = false;
+  private celebrationStartTime: number = 0;
+  private celebrationDuration: number = 2000; // 2 seconds
+  private celebratingBall: Matter.Body | null = null;
+  private isCashOutComplete: boolean = false;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.engine = Matter.Engine.create({
@@ -94,8 +101,12 @@ export default class PlinkoEngine {
       if (event.code === 'Space' && !event.repeat) {
         event.preventDefault(); // Prevent page scrolling
         
+        // If cash out is complete/celebrating OR game is dead, reset for new game
+        if (this.isCashOutComplete || this.isCashOutCelebrating || this.isGameDead) {
+          this.resetGame();
+        }
         // If game is in progress, cash out. Otherwise, drop a ball.
-        if (this.isGameInProgress()) {
+        else if (this.isGameInProgress()) {
           this.cashOut();
         } else {
           this.dropBall();
@@ -120,6 +131,7 @@ export default class PlinkoEngine {
       this.limitBallVelocities();
       this.handleBallWrapping();
       this.updateExplosionParticles();
+      this.updateCashOutCelebration();
     });
 
     // Setup collision detection for death passages and cash out passages
@@ -488,6 +500,97 @@ export default class PlinkoEngine {
     }
   }
 
+  private updateCashOutCelebration() {
+    if (!this.isCashOutCelebrating) return;
+    
+    const elapsed = Date.now() - this.celebrationStartTime;
+    const progress = elapsed / this.celebrationDuration;
+
+    if (progress >= 1) {
+      // Celebration effects complete - stop celebrating but don't reset game yet
+      this.finishCashOutEffects();
+    } else {
+      // Update green flash effects
+      this.updateCashOutEffects(progress);
+    }
+  }
+
+  private updateCashOutEffects(progress: number) {
+    if (!this.celebratingBall || !this.celebratingBall.render) return;
+    
+    // Create pulsing green effect for the ball
+    const pulse = Math.sin(progress * Math.PI * 8) * 0.5 + 0.5; // Fast pulsing
+    const greenIntensity = 100 + (pulse * 155); // Green from 100 to 255
+    
+    // Make ball flash bright green
+    this.celebratingBall.render.fillStyle = `rgb(0, ${Math.floor(greenIntensity)}, 0)`;
+    this.celebratingBall.render.strokeStyle = '#00ff00';
+    this.celebratingBall.render.lineWidth = 3 + (pulse * 2);
+    
+    // Add screen-wide green pulse effect
+    this.updateScreenGreenPulse(progress, pulse);
+  }
+
+  private updateScreenGreenPulse(progress: number, pulse: number) {
+    // Create screen-wide green overlay effect by manipulating render background
+    const greenAlpha = (pulse * 0.15) * (1 - progress); // Fade out over time
+    const greenOverlay = `rgba(0, 255, 0, ${greenAlpha})`;
+    
+    // Apply green tint to the render background temporarily
+    if (this.render.options) {
+      this.render.options.background = greenOverlay;
+    }
+  }
+
+  private finishCashOutEffects() {
+    console.log('Finishing cash out effects...');
+    
+    // Reset celebration state
+    this.isCashOutCelebrating = false;
+    this.celebratingBall = null;
+
+    // Reset render background
+    if (this.render.options) {
+      this.render.options.background = 'transparent';
+    }
+    
+    // Set flag that cash out is complete and waiting for player to start new game
+    this.isCashOutComplete = true;
+    
+    console.log('Cash out effects finished. Press spacebar or reset button to start new game.');
+  }
+
+  private completeCashOut() {
+    // Remove the tracked ball and clean up
+    if (this.trackedBall) {
+      Matter.Composite.remove(this.engine.world, this.trackedBall);
+      this.activeBalls.delete(this.trackedBall);
+      betAmountOfExistingBalls.update((balls) => {
+        const updated = { ...balls };
+        delete updated[this.trackedBall!.id];
+        return updated;
+      });
+    }
+
+    // Reset game state
+    this.trackedBall = null;
+    this.isCameraTracking = false;
+    this.currentMultiplier = 1.0;
+    currentMultiplier.set(this.currentMultiplier);
+    this.startingRowY = null;
+
+    // Reset camera view to initial position
+    Matter.Render.lookAt(this.render, {
+      min: { x: 0, y: 0 },
+      max: { x: PlinkoEngine.WIDTH, y: PlinkoEngine.HEIGHT }
+    });
+
+    // Create a new ready ball
+    this.createReadyBall();
+
+    console.log('Cash out complete');
+  }
+
   start() {
     Matter.Runner.run(this.runner, this.engine);
     Matter.Render.run(this.render);
@@ -815,32 +918,22 @@ export default class PlinkoEngine {
       return [...history, newTotal];
     });
 
-    // Remove the tracked ball and clean up
-    Matter.Composite.remove(this.engine.world, this.trackedBall);
-    this.activeBalls.delete(this.trackedBall);
-    betAmountOfExistingBalls.update((balls) => {
-      const updated = { ...balls };
-      delete updated[this.trackedBall!.id];
-      return updated;
-    });
-
-    // Reset game state
-    this.trackedBall = null;
+    // Set celebration state
+    this.isCashOutCelebrating = true;
+    this.celebrationStartTime = Date.now();
+    this.celebratingBall = this.trackedBall; // Celebrate the ball that just won
+    
+    // Freeze the ball immediately by making it static
+    if (this.celebratingBall) {
+      Matter.Body.setStatic(this.celebratingBall, true);
+      // Also zero out any velocity to ensure it stops completely
+      Matter.Body.setVelocity(this.celebratingBall, { x: 0, y: 0 });
+    }
+    
+    // Stop camera tracking immediately - game is paused during celebration
     this.isCameraTracking = false;
-    this.currentMultiplier = 1.0;
-    currentMultiplier.set(this.currentMultiplier);
-    this.startingRowY = null;
 
-    // Reset camera view to initial position
-    Matter.Render.lookAt(this.render, {
-      min: { x: 0, y: 0 },
-      max: { x: PlinkoEngine.WIDTH, y: PlinkoEngine.HEIGHT }
-    });
-
-    // Create a new ready ball
-    this.createReadyBall();
-
-    console.log('Cash out complete');
+    console.log('Cash out celebration started - ball frozen in place.');
   }
 
   private limitBallVelocities() {
@@ -1020,7 +1113,7 @@ export default class PlinkoEngine {
 
   // Add method to check if game is in progress
   public isGameInProgress(): boolean {
-    return this.trackedBall !== null;
+    return this.trackedBall !== null && !this.isCashOutCelebrating;
   }
 
   // Add method to check if game is dead (hit death passage)
@@ -1036,10 +1129,21 @@ export default class PlinkoEngine {
     this.isGameDead = false;
     this.explosionStartTime = 0;
     
+    // Clear celebration state
+    this.isCashOutCelebrating = false;
+    this.isCashOutComplete = false;
+    this.celebratingBall = null;
+    this.celebrationStartTime = 0;
+    
     // Remove explosion particles if any
     if (this.explosionParticles.length > 0) {
       Matter.Composite.remove(this.engine.world, this.explosionParticles);
       this.explosionParticles = [];
+    }
+    
+    // Complete any ongoing cash out celebration first
+    if (this.isCashOutCelebrating || this.isCashOutComplete) {
+      this.completeCashOut();
     }
     
     // Remove tracked ball if it exists
