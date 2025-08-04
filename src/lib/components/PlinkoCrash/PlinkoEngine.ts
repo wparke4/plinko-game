@@ -1042,18 +1042,6 @@ export default class PlinkoEngine {
       this.explosionParticles = [];
     }
     
-    // Clear all passages
-    if (this.deathPassages.length > 0) {
-      Matter.Composite.remove(this.engine.world, this.deathPassages);
-      this.deathPassages = [];
-    }
-    if (this.cashOutPassages.length > 0) {
-      Matter.Composite.remove(this.engine.world, this.cashOutPassages);
-      this.cashOutPassages = [];
-    }
-    this.rowDeathPassages.clear();
-    this.rowCashOutPassages.clear();
-    
     // Remove tracked ball if it exists
     if (this.trackedBall) {
       Matter.Composite.remove(this.engine.world, this.trackedBall);
@@ -1081,6 +1069,9 @@ export default class PlinkoEngine {
       min: { x: 0, y: 0 },
       max: { x: PlinkoEngine.WIDTH, y: PlinkoEngine.HEIGHT }
     });
+    
+    // Completely regenerate the pin grid and passages
+    this.placePinsAndWalls();
     
     // Create a new ready ball
     this.createReadyBall();
