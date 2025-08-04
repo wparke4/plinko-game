@@ -15,6 +15,7 @@ export default class PlinkoEngine {
   static readonly BALL_CATEGORY = 0x0002;
   static readonly WALL_CATEGORY = 0x0004;  // New category for walls
   static readonly DEATH_PASSAGE_CATEGORY = 0x0008;  // New category for death passages
+  static readonly CASH_OUT_PASSAGE_CATEGORY = 0x0016;  // New category for cash out passages
   static readonly EXPLOSION_CATEGORY = 0x0010;  // New category for explosion particles
   static readonly ROW_HEIGHT = 35; // Reduced from 50 to fit more rows
   static readonly VIEWPORT_BUFFER = 2; // Number of screen heights to keep pins loaded above and below viewport
@@ -23,6 +24,8 @@ export default class PlinkoEngine {
   static readonly READY_BALL_SPEED = 7; // Speed of the ready ball moving side to side
   static readonly DEATH_PASSAGE_WIDTH = 25; // Width of the horizontal death passage laser
   static readonly DEATH_PASSAGE_HEIGHT = 8; // Height of the horizontal death passage laser
+  static readonly CASH_OUT_PASSAGE_WIDTH = 25; // Width of the horizontal cash out passage
+  static readonly CASH_OUT_PASSAGE_HEIGHT = 8; // Height of the horizontal cash out passage
 
   private engine: Matter.Engine;
   private render: Matter.Render;
@@ -44,6 +47,10 @@ export default class PlinkoEngine {
   // Death passage management
   private deathPassages: Matter.Body[] = [];
   private rowDeathPassages: Map<number, Matter.Body> = new Map(); // Y position to death passage mapping
+  
+  // Cash out passage management
+  private cashOutPassages: Matter.Body[] = [];
+  private rowCashOutPassages: Map<number, Matter.Body> = new Map(); // Y position to cash out passage mapping
   
   // Camera tracking properties
   private cameraY: number = 0;
@@ -115,9 +122,10 @@ export default class PlinkoEngine {
       this.updateExplosionParticles();
     });
 
-    // Setup collision detection for death passages
+    // Setup collision detection for death passages and cash out passages
     Matter.Events.on(this.engine, 'collisionStart', (event) => {
       this.handleDeathPassageCollision(event);
+      this.handleCashOutPassageCollision(event);
     });
   }
 
@@ -182,8 +190,13 @@ export default class PlinkoEngine {
       Matter.Composite.remove(this.engine.world, this.deathPassages);
       this.deathPassages = [];
     }
+    if (this.cashOutPassages.length > 0) {
+      Matter.Composite.remove(this.engine.world, this.cashOutPassages);
+      this.cashOutPassages = [];
+    }
     this.rowPinPositions.clear();
     this.rowDeathPassages.clear();
+    this.rowCashOutPassages.clear();
   }
 
     private createRowOfPins(rowY: number, pinCount: number, isOffset: boolean = false) {
@@ -226,6 +239,12 @@ export default class PlinkoEngine {
     
     // Create death passage for this row
     this.createDeathPassage(rowY, isOffset);
+    
+    // Create cash out passage for every 3rd row starting from row 3
+    const rowIndex = Math.floor((rowY - this.firstVisibleRowY) / PlinkoEngine.ROW_HEIGHT);
+    if ((rowIndex + 1) % 3 === 0) {
+      this.createCashOutPassage(rowY, isOffset);
+    }
   }
 
   private createDeathPassage(rowY: number, isOffset: boolean) {
@@ -274,6 +293,89 @@ export default class PlinkoEngine {
     this.deathPassages.push(deathPassage);
     this.rowDeathPassages.set(rowY, deathPassage);
     Matter.Composite.add(this.engine.world, deathPassage);
+  }
+
+  private createCashOutPassage(rowY: number, isOffset: boolean) {
+    const { PADDING_X, PINS_PER_ROW, CASH_OUT_PASSAGE_CATEGORY, BALL_CATEGORY, CASH_OUT_PASSAGE_WIDTH, CASH_OUT_PASSAGE_HEIGHT } = PlinkoEngine;
+    
+    // Calculate pin spacing
+    const pinSpacing = (this.canvas.width - PADDING_X * 2) / (PINS_PER_ROW - 1);
+    
+    // Calculate number of passages (spaces between pins)
+    const numPassages = isOffset ? PINS_PER_ROW - 2 : PINS_PER_ROW - 1;
+    
+    // Get the death passage for this row to avoid conflict
+    const deathPassage = this.rowDeathPassages.get(rowY);
+    let deathPassageIndex = -1;
+    
+    if (deathPassage) {
+      // Calculate which passage the death passage is in
+      for (let i = 0; i < numPassages; i++) {
+        let passageX: number;
+        if (isOffset) {
+          passageX = PADDING_X + (pinSpacing / 2) + (i * pinSpacing) + (pinSpacing / 2);
+        } else {
+          passageX = PADDING_X + (i * pinSpacing) + (pinSpacing / 2);
+        }
+        
+        // Check if death passage X position matches this passage (with some tolerance)
+        if (Math.abs(deathPassage.position.x - passageX) < pinSpacing / 4) {
+          deathPassageIndex = i;
+          break;
+        }
+      }
+    }
+    
+    // Find available passages (excluding the death passage)
+    const availablePassages: number[] = [];
+    for (let i = 0; i < numPassages; i++) {
+      if (i !== deathPassageIndex) {
+        availablePassages.push(i);
+      }
+    }
+    
+    // If no available passages (shouldn't happen), don't create cash out passage
+    if (availablePassages.length === 0) {
+      return;
+    }
+    
+    // Randomly select from available passages
+    const cashOutPassageIndex = availablePassages[Math.floor(Math.random() * availablePassages.length)];
+    
+    // Calculate the X position of the cash out passage
+    let passageX: number;
+    if (isOffset) {
+      // For offset rows, passages are between offset pins
+      passageX = PADDING_X + (pinSpacing / 2) + (cashOutPassageIndex * pinSpacing) + (pinSpacing / 2);
+    } else {
+      // For normal rows, passages are between regular pins
+      passageX = PADDING_X + (cashOutPassageIndex * pinSpacing) + (pinSpacing / 2);
+    }
+    
+    // Create the cash out passage body (horizontal laser) - positioned at the same level as the pegs
+    const cashOutPassage = Matter.Bodies.rectangle(
+      passageX,
+      rowY,
+      CASH_OUT_PASSAGE_WIDTH,
+      CASH_OUT_PASSAGE_HEIGHT,
+      {
+        isStatic: true,
+        isSensor: true, // Make it a sensor so balls pass through but we can detect collision
+        render: {
+          fillStyle: '#00ff44', // Bright neon green
+          strokeStyle: '#66ff66',
+          lineWidth: 3,
+        },
+        collisionFilter: {
+          category: CASH_OUT_PASSAGE_CATEGORY,
+          mask: BALL_CATEGORY,
+        },
+      }
+    );
+    
+    this.cashOutPassages.push(cashOutPassage);
+    this.rowCashOutPassages.set(rowY, cashOutPassage);
+    Matter.Composite.add(this.engine.world, cashOutPassage);
   }
 
   private createExplosion(x: number, y: number) {
@@ -505,6 +607,14 @@ export default class PlinkoEngine {
           this.rowDeathPassages.delete(rowY);
         }
         
+        // Also clean up cash out passage for this row
+        const cashOutPassage = this.rowCashOutPassages.get(rowY);
+        if (cashOutPassage) {
+          Matter.Composite.remove(this.engine.world, cashOutPassage);
+          this.cashOutPassages = this.cashOutPassages.filter(cp => cp !== cashOutPassage);
+          this.rowCashOutPassages.delete(rowY);
+        }
+        
         if (this.rowPinPositions.size > 0) {
           this.firstVisibleRowY = Math.min(...this.rowPinPositions.keys());
         }
@@ -600,7 +710,7 @@ export default class PlinkoEngine {
         density: 0.8,
         collisionFilter: {
           category: PlinkoEngine.BALL_CATEGORY,
-          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY | PlinkoEngine.DEATH_PASSAGE_CATEGORY,
+          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY | PlinkoEngine.DEATH_PASSAGE_CATEGORY | PlinkoEngine.CASH_OUT_PASSAGE_CATEGORY,
         },
         render: {
           fillStyle: '#ff0000',
@@ -787,6 +897,41 @@ export default class PlinkoEngine {
     }
   }
 
+  private handleCashOutPassageCollision(event: Matter.IEventCollision<Matter.Engine>) {
+    const pairs = event.pairs;
+    
+    for (const pair of pairs) {
+      const { bodyA, bodyB } = pair;
+      
+      // Check if one body is a ball and the other is a cash out passage
+      let ball: Matter.Body | null = null;
+      let cashOutPassage: Matter.Body | null = null;
+      
+      if (bodyA.collisionFilter.category === PlinkoEngine.BALL_CATEGORY && 
+          bodyB.collisionFilter.category === PlinkoEngine.CASH_OUT_PASSAGE_CATEGORY) {
+        ball = bodyA;
+        cashOutPassage = bodyB;
+      } else if (bodyB.collisionFilter.category === PlinkoEngine.BALL_CATEGORY && 
+                 bodyA.collisionFilter.category === PlinkoEngine.CASH_OUT_PASSAGE_CATEGORY) {
+        ball = bodyB;
+        cashOutPassage = bodyA;
+      }
+      
+      // If we found a ball-cash out passage collision and it's the tracked ball
+      if (ball && cashOutPassage && ball === this.trackedBall) {
+        // Additional check: only trigger cash out if ball is moving downward
+        // This prevents false positives when ball bounces off nearby pegs
+        if (ball.velocity.y > 0) {
+          console.log('Ball hit cash out passage while moving downward! Auto cash out.');
+          this.cashOut(); // Use the existing cash out method
+          break; // Only handle the first collision
+        } else {
+          console.log('Ball hit cash out passage but was moving upward, ignoring collision.');
+        }
+      }
+    }
+  }
+
   private handleDeathGameOver() {
     if (!this.trackedBall) {
       console.log('No tracked ball, cannot handle death game over');
@@ -896,6 +1041,18 @@ export default class PlinkoEngine {
       Matter.Composite.remove(this.engine.world, this.explosionParticles);
       this.explosionParticles = [];
     }
+    
+    // Clear all passages
+    if (this.deathPassages.length > 0) {
+      Matter.Composite.remove(this.engine.world, this.deathPassages);
+      this.deathPassages = [];
+    }
+    if (this.cashOutPassages.length > 0) {
+      Matter.Composite.remove(this.engine.world, this.cashOutPassages);
+      this.cashOutPassages = [];
+    }
+    this.rowDeathPassages.clear();
+    this.rowCashOutPassages.clear();
     
     // Remove tracked ball if it exists
     if (this.trackedBall) {
