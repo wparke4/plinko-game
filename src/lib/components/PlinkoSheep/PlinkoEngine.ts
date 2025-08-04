@@ -23,6 +23,9 @@ export default class PlinkoEngine {
   static readonly DEATH_PASSAGE_WIDTH = 25; // Width of the horizontal death passage laser
   static readonly DEATH_PASSAGE_HEIGHT = 8; // Height of the horizontal death passage laser
 
+  // Feature toggle for multiplier overlay
+  static readonly SHOW_MULTIPLIER_OVERLAY = false; // Set to true to enable, false to disable
+
   // Risk-based pin configuration
   private static readonly PINS_PER_ROW_CONFIG = {
     [RiskLevel.MEDIUM]: 23,
@@ -142,8 +145,11 @@ export default class PlinkoEngine {
     this.setupWorld();
     this.placePinsAndWalls();
 
-    // Create runner
-    this.runner = Matter.Runner.create();
+    // Create runner with fixed timing for consistent gameplay across different refresh rates
+    this.runner = Matter.Runner.create({
+      delta: 1000 / 60, // Fixed 60 FPS timing - 16.666ms per frame
+      isFixed: true
+    });
 
     // Setup camera update and velocity limiting
     Matter.Events.on(this.engine, 'beforeUpdate', () => {
@@ -153,6 +159,11 @@ export default class PlinkoEngine {
       this.updateExplosionParticles();
       this.updateCashOutCelebration();
       this.updateFlashAnimations();
+    });
+
+    // Setup custom rendering for multiplier overlay (renders after physics bodies)
+    Matter.Events.on(this.render, 'afterRender', () => {
+      this.renderMultiplierOverlay();
     });
 
     // Setup collision detection for death passages
@@ -1425,5 +1436,85 @@ export default class PlinkoEngine {
     }
     
     console.log(`Revealed ${Array.from(this.rowDeathPassages.entries()).filter(([rowY]) => rowY >= viewportTop && rowY <= viewportBottom).length} death passages on screen`);
+  }
+
+  private renderMultiplierOverlay() {
+    // Check if multiplier overlay is enabled
+    if (!PlinkoEngine.SHOW_MULTIPLIER_OVERLAY) {
+      return;
+    }
+
+    // Get the canvas context directly from the render canvas
+    const canvas = this.render.canvas as HTMLCanvasElement;
+    if (!canvas) {
+      console.log('No canvas found for multiplier overlay');
+      return;
+    }
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      console.log('No 2D context found for multiplier overlay');
+      return;
+    }
+    
+    // Only render multiplier overlay during active gameplay
+    if (!this.isGameInProgress() && !this.isCashOutCelebrating && !this.isGameDead) {
+      return;
+    }
+    
+    // Calculate text position in bottom 20% of visible area
+    const bottomAreaHeight = PlinkoEngine.HEIGHT * 0.2; // Bottom 20%
+    const textY = PlinkoEngine.HEIGHT - (bottomAreaHeight / 2); // Center of bottom 20%
+    const textX = PlinkoEngine.WIDTH / 2; // Center horizontally
+    
+    // Save canvas state
+    ctx.save();
+    
+    // Don't apply camera offset - we want the text to stay in the same screen position
+    // The text should stay in the bottom 20% of the viewport regardless of camera movement
+    
+    // Set text properties - medium font (40% smaller again)
+    const fontSize = Math.min(72, PlinkoEngine.WIDTH / 11); // 40% smaller than previous
+    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // Full opacity
+    ctx.globalAlpha = 1.0; // 100% opacity
+    
+    // Add stronger text shadow for better visibility
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+    ctx.shadowBlur = 15;
+    ctx.shadowOffsetX = 3;
+    ctx.shadowOffsetY = 3;
+    
+    // Set text color based on game state
+    if (this.isCashOutCelebrating) {
+      // Bright green during cash out celebration
+      ctx.fillStyle = '#00ff00';
+    } else if (this.isGameDead) {
+      // Bright red during death state
+      ctx.fillStyle = '#ff0000';
+    } else {
+      // Off-white during normal gameplay that matches the UI
+      ctx.fillStyle = '#f1f5f9'; // Slate-50 off-white
+    }
+    
+    // Format and draw the multiplier text
+    const multiplierText = `${this.currentMultiplier.toFixed(2)}×`;
+    ctx.fillText(multiplierText, textX, textY);
+    
+    console.log('Rendering multiplier overlay:', {
+      multiplierText,
+      textX,
+      textY,
+      fontSize,
+      gameInProgress: this.isGameInProgress(),
+      celebrating: this.isCashOutCelebrating,
+      dead: this.isGameDead
+    });
+    
+    // Restore canvas state
+    ctx.restore();
   }
 }

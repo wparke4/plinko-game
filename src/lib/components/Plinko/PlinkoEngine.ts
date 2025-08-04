@@ -141,7 +141,10 @@ class PlinkoEngine {
         wireframes: false,
       },
     });
-    this.runner = Matter.Runner.create();
+    this.runner = Matter.Runner.create({
+      delta: 1000 / 60, // Fixed 60 FPS timing - 16.666ms per frame
+      isFixed: true
+    });
 
     this.placePinsAndWalls();
 

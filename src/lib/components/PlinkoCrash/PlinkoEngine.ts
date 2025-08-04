@@ -100,8 +100,11 @@ export default class PlinkoEngine {
     this.setupWorld();
     this.placePinsAndWalls();
 
-    // Create runner
-    this.runner = Matter.Runner.create();
+    // Create runner with fixed timing for consistent gameplay across different refresh rates
+    this.runner = Matter.Runner.create({
+      delta: 1000 / 60, // Fixed 60 FPS timing - 16.666ms per frame
+      isFixed: true
+    });
 
     // Setup camera update and velocity limiting
     Matter.Events.on(this.engine, 'beforeUpdate', () => {
