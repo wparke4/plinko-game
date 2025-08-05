@@ -66,9 +66,10 @@
           <button
             onclick={handleBetClick}
             disabled={isDropBallDisabled}
-            class="touch-manipulation rounded-md bg-green-500 py-2 px-6 font-semibold text-slate-900 transition-colors hover:bg-green-400 active:bg-green-600 disabled:bg-neutral-600 disabled:text-neutral-400"
+            class="touch-manipulation rounded-md bg-green-500 py-2 px-6 font-semibold text-slate-900 transition-colors hover:bg-green-400 active:bg-green-600 disabled:bg-neutral-600 disabled:text-neutral-400 flex flex-col"
           >
-            Drop Ball
+            <span>Drop Ball</span>
+            <span class="text-sm font-normal">(spacebar)</span>
           </button>
         {:else if isGameInProgress}
           <!-- State 2: Game in progress - no buttons visible -->
@@ -76,9 +77,10 @@
           <!-- State 3: Game ended - only show Reset Game button -->
           <button
             onclick={handleResetClick}
-            class="touch-manipulation rounded-md bg-red-500 py-2 px-6 font-semibold text-white transition-colors hover:bg-red-400 active:bg-red-600"
+            class="touch-manipulation rounded-md bg-gray-100 py-2 px-6 font-semibold text-black transition-colors hover:bg-gray-200 active:bg-gray-300 flex flex-col"
           >
-            Reset Game
+            <span>Play Again</span>
+            <span class="text-sm font-normal">(spacebar)</span>
           </button>
         {/if}
       </div>
