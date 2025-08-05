@@ -1346,6 +1346,11 @@ export default class PlinkoEngine {
     this.celebratingBall = null;
     this.celebrationStartTime = 0;
     
+    // Reset render background to clear any green flash effects
+    if (this.render.options) {
+      this.render.options.background = 'transparent';
+    }
+    
     // Remove explosion particles if any
     if (this.explosionParticles.length > 0) {
       Matter.Composite.remove(this.engine.world, this.explosionParticles);
