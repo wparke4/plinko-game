@@ -1373,7 +1373,7 @@ export default class PlinkoEngine {
 
   private updateScreenGreenPulse(progress: number, pulse: number) {
     // Create screen-wide green overlay effect by manipulating render background
-    const greenAlpha = (pulse * 0.15) * (1 - progress); // Fade out over time
+    const greenAlpha = (pulse * 0.02) * (1 - progress); // Reduced from 0.15 to 0.08 for better readability
     const greenOverlay = `rgba(0, 255, 0, ${greenAlpha})`;
     
     // Apply green tint to the render background temporarily

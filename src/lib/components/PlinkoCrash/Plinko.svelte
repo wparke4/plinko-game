@@ -1,6 +1,6 @@
 <!-- Plinko.svelte -->
 <script lang="ts">
-  import { plinkoEngine, betAmount, balance, currentMultiplier, gameState } from '$lib/stores/game';
+  import { plinkoEngine, betAmount, balance, currentMultiplier, gameState, totalProfitHistory, isMultiplierFlashing, winRecords } from '$lib/stores/game';
   import CircleNotch from 'phosphor-svelte/lib/CircleNotch';
   import type { Action } from 'svelte/action';
   import LastWins from './LastWins.svelte';
@@ -16,6 +16,18 @@
     return {
       destroy: () => {
         $plinkoEngine?.stop();
+        
+        // Reset multiplier-related stores when switching modes
+        currentMultiplier.set(0);
+        totalProfitHistory.set([0]);
+        isMultiplierFlashing.set(false);
+        winRecords.set([]);
+        gameState.set({
+          isGameInProgress: false,
+          isGameDead: false,
+          isCashOutCelebrating: false,
+          isCashOutComplete: false
+        });
       },
     };
   };
