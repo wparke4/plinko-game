@@ -22,9 +22,9 @@
   ];
 
   const riskLevels = [
-    { value: RiskLevel.LOW, label: 'Low', pins: '25 pins', description: 'Lower risk, safer gameplay' },
-    { value: RiskLevel.MEDIUM, label: 'Medium', pins: '23 pins', description: 'Balanced risk and reward' },
-    { value: RiskLevel.HIGH, label: 'High', pins: '15 pins', description: 'Higher risk, higher multipliers' },
+    { value: RiskLevel.LOW, label: 'Mild 🫑', description: 'Lower risk, safer gameplay' },
+    { value: RiskLevel.MEDIUM, label: 'Medium 🌶️', description: 'Balanced risk and reward' },
+    { value: RiskLevel.HIGH, label: 'Spicy 🥵', description: 'Higher risk, higher multipliers' },
   ];
 
   let isGameInProgress = $derived($plinkoEngine?.isGameInProgress() ?? false);
@@ -47,14 +47,13 @@
     <div class="flex flex-col gap-0.5">
       <label class="text-xs font-medium text-slate-400">Risk Level</label>
       <div class="flex gap-1 rounded-full bg-slate-900 p-0.5">
-        {#each riskLevels as { value, label, pins }}
+        {#each riskLevels as { value, label }}
           <button
             onclick={() => handleRiskChange(value)}
             disabled={isGameInProgress}
-            class="rounded-full py-0.5 px-2 text-xs font-medium text-white transition hover:not-disabled:bg-slate-600 active:not-disabled:bg-slate-500 disabled:cursor-not-allowed disabled:opacity-50 {$riskLevel === value ? 'bg-slate-600' : ''} flex flex-col items-center"
+            class="rounded-full py-1 px-3 text-sm font-medium text-white transition hover:not-disabled:bg-slate-600 active:not-disabled:bg-slate-500 disabled:cursor-not-allowed disabled:opacity-50 {$riskLevel === value ? 'bg-slate-600' : ''}"
           >
-            <span>{label}</span>
-            <span class="text-xs opacity-75">{pins}</span>
+            {label}
           </button>
         {/each}
       </div>
