@@ -1121,6 +1121,11 @@ export default class PlinkoEngine {
     // Reset multiplier flashing
     isMultiplierFlashing.set(false);
 
+    // Reset render background to clear any green flash effects
+    if (this.render.options) {
+      this.render.options.background = 'transparent';
+    }
+
     // CREATE THE EXPLOSION! 🎆💥
     this.createExplosion(explosionX, explosionY);
 
@@ -1242,6 +1247,11 @@ export default class PlinkoEngine {
     
     // Reset multiplier flashing
     isMultiplierFlashing.set(false);
+    
+    // Reset render background to clear any green flash effects
+    if (this.render.options) {
+      this.render.options.background = 'transparent';
+    }
     
     // Reset revelation tracking
     this.revealedRows.clear();
