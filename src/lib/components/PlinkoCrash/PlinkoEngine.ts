@@ -75,8 +75,9 @@ export default class PlinkoEngine {
   private isCashOutComplete: boolean = false;
 
   // Dynamic passage movement properties (for pre-game state)
-  private dynamicPassageTimer: NodeJS.Timeout | null = null;
-  private readonly DYNAMIC_PASSAGE_UPDATE_INTERVAL = 800; // Update every 800ms
+  private dynamicPassageTimers: Map<number, NodeJS.Timeout> = new Map(); // Row Y -> Timer mapping
+  private readonly MIN_DYNAMIC_PASSAGE_INTERVAL = 600; // Minimum interval between updates
+  private readonly MAX_DYNAMIC_PASSAGE_INTERVAL = 1200; // Maximum interval between updates
   private isDynamicPassagesActive: boolean = false;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -405,35 +406,51 @@ export default class PlinkoEngine {
     console.log('Starting dynamic passage updates...');
     this.isDynamicPassagesActive = true;
     
-    this.dynamicPassageTimer = setInterval(() => {
-      // Only update if we're still in ready state (not in game)
-      if (this.readyBall && !this.isGameInProgress()) {
-        this.updateDynamicPassagePositions();
-      } else {
-        // Stop updates if game state changed
-        this.stopDynamicPassageUpdates();
-      }
-    }, this.DYNAMIC_PASSAGE_UPDATE_INTERVAL);
-  }
+    this.dynamicPassageTimers.clear(); // Clear any existing timers
 
-  private stopDynamicPassageUpdates() {
-    if (this.dynamicPassageTimer) {
-      console.log('Stopping dynamic passage updates...');
-      clearInterval(this.dynamicPassageTimer);
-      this.dynamicPassageTimer = null;
-      this.isDynamicPassagesActive = false;
+    // Get all unique row Y positions that have passages
+    const allRowsWithPassages = new Set<number>();
+    this.rowDeathPassages.forEach((_, rowY) => allRowsWithPassages.add(rowY));
+    this.rowCashOutPassages.forEach((_, rowY) => allRowsWithPassages.add(rowY));
+
+    // Set up one timer per row that handles all passages in that row
+    for (const rowY of allRowsWithPassages) {
+      const interval = this.MIN_DYNAMIC_PASSAGE_INTERVAL + Math.random() * (this.MAX_DYNAMIC_PASSAGE_INTERVAL - this.MIN_DYNAMIC_PASSAGE_INTERVAL);
+      
+      const timer = setInterval(() => {
+        // Only update if we're still in ready state (not in game)
+        if (this.readyBall && !this.isGameInProgress()) {
+          this.updateAllPassagesForRow(rowY);
+        } else {
+          // Stop updates if game state changed
+          this.stopDynamicPassageUpdates();
+        }
+      }, interval);
+      
+      this.dynamicPassageTimers.set(rowY, timer);
     }
   }
 
-  private updateDynamicPassagePositions() {
-    // Update all visible passage positions randomly
-    for (const [rowY, deathPassage] of this.rowDeathPassages.entries()) {
+  private updateAllPassagesForRow(rowY: number) {
+    // Update death passage if it exists for this row
+    if (this.rowDeathPassages.has(rowY)) {
       this.updatePassagePositionForRow(rowY, 'death');
     }
     
-    for (const [rowY, cashOutPassage] of this.rowCashOutPassages.entries()) {
+    // Update cash out passage if it exists for this row
+    if (this.rowCashOutPassages.has(rowY)) {
       this.updatePassagePositionForRow(rowY, 'cashout');
     }
+  }
+
+  private stopDynamicPassageUpdates() {
+    if (this.dynamicPassageTimers.size === 0) {
+      return;
+    }
+    console.log('Stopping dynamic passage updates...');
+    this.dynamicPassageTimers.forEach(clearInterval);
+    this.dynamicPassageTimers.clear();
+    this.isDynamicPassagesActive = false;
   }
 
   private updatePassagePositionForRow(rowY: number, passageType: 'death' | 'cashout') {
@@ -993,14 +1010,14 @@ export default class PlinkoEngine {
   private generateFinalPassagePositions() {
     console.log('Generating final passage positions...');
     
-    // Update all death passages to new random positions
-    for (const [rowY, deathPassage] of this.rowDeathPassages.entries()) {
-      this.updatePassagePositionForRow(rowY, 'death');
-    }
+    // Get all unique row Y positions that have passages and update them all
+    const allRowsWithPassages = new Set<number>();
+    this.rowDeathPassages.forEach((_, rowY) => allRowsWithPassages.add(rowY));
+    this.rowCashOutPassages.forEach((_, rowY) => allRowsWithPassages.add(rowY));
     
-    // Update all cash out passages to new random positions (avoiding death passages)
-    for (const [rowY, cashOutPassage] of this.rowCashOutPassages.entries()) {
-      this.updatePassagePositionForRow(rowY, 'cashout');
+    // Update all passages for each row
+    for (const rowY of allRowsWithPassages) {
+      this.updateAllPassagesForRow(rowY);
     }
     
     console.log('Final passage positions set - they will remain fixed for this game.');
