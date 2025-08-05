@@ -30,15 +30,15 @@ export default class PlinkoEngine {
   private static readonly PINS_PER_ROW_CONFIG = {
     [RiskLevel.LOW]: 25,    // Safer gameplay with more pins
     [RiskLevel.MEDIUM]: 23, // Default balanced setting
-    [RiskLevel.HIGH]: 15,   // More dangerous with fewer pins
+    [RiskLevel.HIGH]: 18,   // Moderate risk with 18 pins
   };
 
   // Fixed pin spacing based on medium risk as reference
   private static readonly REFERENCE_PIN_SPACING = 30; // pixels between pin centers
   private static readonly BASE_PINS_PER_ROW = 23; // medium risk as reference
 
-  private currentRiskLevel: RiskLevel = RiskLevel.HIGH; // Start with high risk (15 pins)
-  private currentPinsPerRow: number = 15;
+  private currentRiskLevel: RiskLevel = RiskLevel.HIGH; // Start with high risk (18 pins)
+  private currentPinsPerRow: number = 18;
   private currentGameAreaWidth: number = 0;
   private currentGameAreaPaddingX: number = 0;
 
