@@ -704,7 +704,7 @@ export default class PlinkoEngine {
     // Reset game state
     this.trackedBall = null;
     this.isCameraTracking = false;
-    this.currentMultiplier = 1.0;
+    this.currentMultiplier = 0.0;
     currentMultiplier.set(this.currentMultiplier);
     this.startingRowY = null;
 
@@ -758,7 +758,22 @@ export default class PlinkoEngine {
     // Update multiplier based on rows passed
     if (this.startingRowY !== null) {
       const rowsPassed = Math.floor((ballY - this.startingRowY) / PlinkoEngine.ROW_HEIGHT);
-      const newMultiplier = Math.max(1.0, Math.pow(1.04, rowsPassed)); // Start at 1.0x, increase by 4% each row
+      
+      // Progressive multiplier with slower acceleration: 0.00x -> 0.05x -> 0.10x -> 0.16x -> 0.22x -> 0.29x...
+      // Increment increases by 0.01x every 2 rows: +0.05x, +0.05x, +0.06x, +0.06x, +0.07x, +0.07x...
+      let newMultiplier = 0.0;
+      if (rowsPassed > 0) {
+        const completePairs = Math.floor((rowsPassed - 1) / 2);
+        const remainingRows = rowsPassed - (completePairs * 2);
+        const currentPairIncrement = 0.05 + 0.01 * completePairs;
+        
+        // Sum of all complete pairs
+        const completePairsSum = completePairs > 0 ? 
+          2 * (0.05 * completePairs + 0.005 * (completePairs - 1) * completePairs) : 0;
+        
+        // Add remaining rows in current pair
+        newMultiplier = completePairsSum + (remainingRows * currentPairIncrement);
+      }
       
       // Only update if the multiplier has changed
       if (newMultiplier !== this.currentMultiplier) {
@@ -801,7 +816,7 @@ export default class PlinkoEngine {
       this.trackedBall = null;
       this.isCameraTracking = false;
       // Reset multiplier when ball goes too far
-      this.currentMultiplier = 1.0;
+      this.currentMultiplier = 0.0;
       currentMultiplier.set(this.currentMultiplier);
     }
   }
@@ -936,7 +951,7 @@ export default class PlinkoEngine {
     this.generateFinalPassagePositions();
 
     // Reset multiplier and set starting row
-    this.currentMultiplier = 1.0;
+    this.currentMultiplier = 0.0;
     currentMultiplier.set(this.currentMultiplier); // Update the store
     this.startingRowY = PlinkoEngine.PADDING_TOP; // Set to first row of pins instead of ready ball position
     console.log('Starting row Y set to:', this.startingRowY);
@@ -999,7 +1014,7 @@ export default class PlinkoEngine {
         this.trackedBall = null;
         this.isCameraTracking = false;
         // Reset multiplier when game ends
-        this.currentMultiplier = 1.0;
+        this.currentMultiplier = 0.0;
         currentMultiplier.set(this.currentMultiplier);
         // Create a new ready ball for the next game
         this.createReadyBall();
@@ -1360,7 +1375,7 @@ export default class PlinkoEngine {
     this.highestCameraY = 0;
     
     // Reset multiplier
-    this.currentMultiplier = 1.0;
+    this.currentMultiplier = 0.0;
     currentMultiplier.set(this.currentMultiplier);
     this.startingRowY = null;
     
