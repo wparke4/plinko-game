@@ -30,6 +30,7 @@
   "devDependencies": {
     "@playwright/test": "^1.44.0",
     "@sveltejs/adapter-static": "^3.0.1",
+    "@sveltejs/adapter-vercel": "^5.8.1",
     "@sveltejs/kit": "^2.5.27",
     "@sveltejs/vite-plugin-svelte": "^4.0.0",
     "@tailwindcss/vite": "^4.0.6",
