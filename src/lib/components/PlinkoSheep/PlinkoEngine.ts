@@ -1191,7 +1191,8 @@ export default class PlinkoEngine {
 
   // Add method to check if game is in progress
   public isGameInProgress(): boolean {
-    return this.trackedBall !== null;
+    // Game is only in progress if there's a tracked ball AND we're not in any cash out state
+    return this.trackedBall !== null && !this.isCashOutCelebrating && !this.isCashOutComplete;
   }
 
   // Add method to check if game is dead (hit death passage)
