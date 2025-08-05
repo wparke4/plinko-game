@@ -1,5 +1,5 @@
 import Matter from 'matter-js';
-import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory, currentMultiplier } from '$lib/stores/game';
+import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory, currentMultiplier, gameState } from '$lib/stores/game';
 import { RiskLevel, type RowCount } from '$lib/types';
 import { get } from 'svelte/store';
 
@@ -105,9 +105,10 @@ export default class PlinkoEngine {
         if (this.isCashOutComplete || this.isCashOutCelebrating || this.isGameDead) {
           this.resetGame();
         }
-        // If game is in progress, cash out. Otherwise, drop a ball.
+        // If game is in progress, player must wait for passages. Otherwise, drop a ball.
         else if (this.isGameInProgress()) {
-          this.cashOut();
+          console.log('Game in progress - wait for ball to hit a cash out passage (green) or death passage (red)');
+          // Do nothing - player must wait for automatic cash out or death
         } else {
           this.dropBall();
         }
@@ -557,6 +558,9 @@ export default class PlinkoEngine {
     // Set flag that cash out is complete and waiting for player to start new game
     this.isCashOutComplete = true;
     
+    // Update game state for UI reactivity
+    this.updateGameState();
+    
     console.log('Cash out effects finished. Press spacebar or reset button to start new game.');
   }
 
@@ -595,6 +599,9 @@ export default class PlinkoEngine {
     Matter.Runner.run(this.runner, this.engine);
     Matter.Render.run(this.render);
     this.createReadyBall();
+
+    // Initialize game state for UI reactivity
+    this.updateGameState();
 
     // Add event listener for ready ball movement
     Matter.Events.on(this.engine, 'beforeUpdate', () => {
@@ -838,6 +845,9 @@ export default class PlinkoEngine {
       ballPosition: ball.position
     });
 
+    // Update game state for UI reactivity
+    this.updateGameState();
+
     // Track ball and its bet amount
     this.activeBalls.set(ball, currentBetAmount);
     betAmountOfExistingBalls.update((balls) => ({
@@ -860,6 +870,9 @@ export default class PlinkoEngine {
   }
 
   cashOut() {
+    // This method is now only called automatically when ball hits a cash out passage
+    // Manual cash out has been removed - players must wait for passages
+    
     // Prevent cashing out if game is dead
     if (this.isGameDead) {
       console.log('Game is dead! Please reset the game first.');
@@ -932,6 +945,9 @@ export default class PlinkoEngine {
     
     // Stop camera tracking immediately - game is paused during celebration
     this.isCameraTracking = false;
+
+    // Update game state for UI reactivity
+    this.updateGameState();
 
     console.log('Cash out celebration started - ball frozen in place.');
   }
@@ -1100,6 +1116,9 @@ export default class PlinkoEngine {
     // CREATE THE EXPLOSION! 🎆💥
     this.createExplosion(explosionX, explosionY);
 
+    // Update game state for UI reactivity
+    this.updateGameState();
+
     // DON'T auto-reset! Player must manually reset the game.
     // The explosion will remain visible until they reset.
 
@@ -1119,6 +1138,26 @@ export default class PlinkoEngine {
   // Add method to check if game is dead (hit death passage)
   public getIsGameDead(): boolean {
     return this.isGameDead;
+  }
+
+  // Add method to check if cash out celebration is in progress
+  public getIsCashOutCelebrating(): boolean {
+    return this.isCashOutCelebrating;
+  }
+
+  // Add method to check if cash out is complete
+  public getIsCashOutComplete(): boolean {
+    return this.isCashOutComplete;
+  }
+
+  // Update the reactive game state store
+  private updateGameState() {
+    gameState.set({
+      isGameInProgress: this.isGameInProgress(),
+      isGameDead: this.isGameDead,
+      isCashOutCelebrating: this.isCashOutCelebrating,
+      isCashOutComplete: this.isCashOutComplete
+    });
   }
 
   // Add reset method to allow starting a new game
@@ -1179,6 +1218,9 @@ export default class PlinkoEngine {
     
     // Create a new ready ball
     this.createReadyBall();
+    
+    // Update game state for UI reactivity
+    this.updateGameState();
     
     console.log('Game reset complete - ready for new game!');
   }

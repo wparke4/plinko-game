@@ -49,6 +49,21 @@ export const balance = writable<number>(DEFAULT_BALANCE);
 // Current multiplier during active gameplay (for Plinko Crash mode)
 export const currentMultiplier = writable<number>(0);
 
+// Game state for UI reactivity (specifically for Plinko Crash mode)
+export interface GameState {
+  isGameInProgress: boolean;
+  isGameDead: boolean;
+  isCashOutCelebrating: boolean;
+  isCashOutComplete: boolean;
+}
+
+export const gameState = writable<GameState>({
+  isGameInProgress: false,
+  isGameDead: false,
+  isCashOutCelebrating: false,
+  isCashOutComplete: false
+});
+
 // Multiplier flash state for cash out celebration feedback
 export const isMultiplierFlashing = writable<boolean>(false);
 
