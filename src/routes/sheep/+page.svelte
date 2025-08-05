@@ -2,15 +2,13 @@
   import LiveStatsWindow from '$lib/components/LiveStatsWindow/LiveStatsWindow.svelte';
   import PlinkoSheep from '$lib/components/PlinkoSheep';
   import SettingsWindow from '$lib/components/SettingsWindow';
-  import { setBalanceFromLocalStorage, writeBalanceToLocalStorage } from '$lib/utils/game';
+
   import { plinkoEngine, riskLevel } from '$lib/stores/game';
   import { RiskLevel } from '$lib/types';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
 
-  $effect(() => {
-    setBalanceFromLocalStorage();
-  });
+
 
   // Update engine when risk level changes
   $effect(() => {
@@ -42,7 +40,7 @@
   }
 </script>
 
-<svelte:window onbeforeunload={writeBalanceToLocalStorage} />
+
 
 <div class="relative flex min-h-dvh w-full flex-col bg-gray-900">
   <!-- Top Navigation Bar -->

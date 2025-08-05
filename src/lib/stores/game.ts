@@ -42,11 +42,7 @@ export const zeroedBins = writable<Set<number>>(new Set());
 export const totalProfitHistory = writable<number[]>([0]);
 
 /**
- * Game balance, which is saved to local storage.
- *
- * We only save the balance to local storage on browser `beforeunload` event instead of
- * on every balance change. This prevents unnecessary writes to local storage, which can
- * be slow on low-end devices.
+ * Game balance, which resets to the default value on page refresh.
  */
 export const balance = writable<number>(DEFAULT_BALANCE);
 

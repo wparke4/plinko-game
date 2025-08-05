@@ -5,7 +5,6 @@ import { computeBinProbabilities } from '$lib/utils/numbers';
 export const DEFAULT_BALANCE = 10000;
 
 export const LOCAL_STORAGE_KEY = {
-  BALANCE: 'plinko_balance',
   SETTINGS: {
     ANIMATION: 'plinko_settings_animation',
   },

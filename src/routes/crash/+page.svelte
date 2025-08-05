@@ -2,13 +2,11 @@
   import LiveStatsWindow from '$lib/components/LiveStatsWindow/LiveStatsWindow.svelte';
   import PlinkoCrash from '$lib/components/PlinkoCrash';
   import SettingsWindow from '$lib/components/SettingsWindow';
-  import { setBalanceFromLocalStorage, writeBalanceToLocalStorage } from '$lib/utils/game';
+
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
 
-  $effect(() => {
-    setBalanceFromLocalStorage();
-  });
+
 
   const gameTypes = [
     { value: '/', label: 'Classic Plinko' },
@@ -21,7 +19,7 @@
   }
 </script>
 
-<svelte:window onbeforeunload={writeBalanceToLocalStorage} />
+
 
 <div class="relative flex min-h-dvh w-full flex-col bg-gray-900">
   <div class="absolute top-4 right-4 z-10">
