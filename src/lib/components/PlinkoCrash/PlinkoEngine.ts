@@ -74,6 +74,11 @@ export default class PlinkoEngine {
   private celebratingBall: Matter.Body | null = null;
   private isCashOutComplete: boolean = false;
 
+  // Dynamic passage movement properties (for pre-game state)
+  private dynamicPassageTimer: NodeJS.Timeout | null = null;
+  private readonly DYNAMIC_PASSAGE_UPDATE_INTERVAL = 800; // Update every 800ms
+  private isDynamicPassagesActive: boolean = false;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.engine = Matter.Engine.create({
@@ -391,6 +396,109 @@ export default class PlinkoEngine {
     Matter.Composite.add(this.engine.world, cashOutPassage);
   }
 
+  private startDynamicPassageUpdates() {
+    // Don't start if already active or if game is in progress
+    if (this.isDynamicPassagesActive || this.isGameInProgress()) {
+      return;
+    }
+
+    console.log('Starting dynamic passage updates...');
+    this.isDynamicPassagesActive = true;
+    
+    this.dynamicPassageTimer = setInterval(() => {
+      // Only update if we're still in ready state (not in game)
+      if (this.readyBall && !this.isGameInProgress()) {
+        this.updateDynamicPassagePositions();
+      } else {
+        // Stop updates if game state changed
+        this.stopDynamicPassageUpdates();
+      }
+    }, this.DYNAMIC_PASSAGE_UPDATE_INTERVAL);
+  }
+
+  private stopDynamicPassageUpdates() {
+    if (this.dynamicPassageTimer) {
+      console.log('Stopping dynamic passage updates...');
+      clearInterval(this.dynamicPassageTimer);
+      this.dynamicPassageTimer = null;
+      this.isDynamicPassagesActive = false;
+    }
+  }
+
+  private updateDynamicPassagePositions() {
+    // Update all visible passage positions randomly
+    for (const [rowY, deathPassage] of this.rowDeathPassages.entries()) {
+      this.updatePassagePositionForRow(rowY, 'death');
+    }
+    
+    for (const [rowY, cashOutPassage] of this.rowCashOutPassages.entries()) {
+      this.updatePassagePositionForRow(rowY, 'cashout');
+    }
+  }
+
+  private updatePassagePositionForRow(rowY: number, passageType: 'death' | 'cashout') {
+    const { PADDING_X, PINS_PER_ROW } = PlinkoEngine;
+    
+    // Calculate pin spacing and row offset
+    const pinSpacing = (this.canvas.width - PADDING_X * 2) / (PINS_PER_ROW - 1);
+    const rowIndex = Math.floor((rowY - this.firstVisibleRowY) / PlinkoEngine.ROW_HEIGHT);
+    const isOffset = rowIndex % 2 === 1;
+    
+    // Calculate number of passages (spaces between pins)
+    const numPassages = isOffset ? PINS_PER_ROW - 2 : PINS_PER_ROW - 1;
+    
+    // Get both passages for this row to avoid conflicts
+    const deathPassage = this.rowDeathPassages.get(rowY);
+    const cashOutPassage = this.rowCashOutPassages.get(rowY);
+    
+    // Find available positions for the passage type we're updating
+    const availablePassages: number[] = [];
+    for (let i = 0; i < numPassages; i++) {
+      let passageX: number;
+      if (isOffset) {
+        passageX = PADDING_X + (pinSpacing / 2) + (i * pinSpacing) + (pinSpacing / 2);
+      } else {
+        passageX = PADDING_X + (i * pinSpacing) + (pinSpacing / 2);
+      }
+      
+      // Check if this position conflicts with the other passage type
+      let hasConflict = false;
+      if (passageType === 'death' && cashOutPassage) {
+        hasConflict = Math.abs(cashOutPassage.position.x - passageX) < pinSpacing / 4;
+      } else if (passageType === 'cashout' && deathPassage) {
+        hasConflict = Math.abs(deathPassage.position.x - passageX) < pinSpacing / 4;
+      }
+      
+      if (!hasConflict) {
+        availablePassages.push(i);
+      }
+    }
+    
+    if (availablePassages.length === 0) {
+      return; // No available positions
+    }
+    
+    // Randomly select a new position
+    const newPassageIndex = availablePassages[Math.floor(Math.random() * availablePassages.length)];
+    
+    // Calculate the new X position
+    let newPassageX: number;
+    if (isOffset) {
+      newPassageX = PADDING_X + (pinSpacing / 2) + (newPassageIndex * pinSpacing) + (pinSpacing / 2);
+    } else {
+      newPassageX = PADDING_X + (newPassageIndex * pinSpacing) + (pinSpacing / 2);
+    }
+    
+    // Update the passage position
+    const passage = passageType === 'death' ? deathPassage : cashOutPassage;
+    if (passage) {
+      Matter.Body.setPosition(passage, {
+        x: newPassageX,
+        y: passage.position.y
+      });
+    }
+  }
+
   private createExplosion(x: number, y: number) {
     console.log('Creating explosion at:', { x, y });
     
@@ -617,6 +725,9 @@ export default class PlinkoEngine {
     Matter.Render.stop(this.render);
     Matter.Engine.clear(this.engine);
     
+    // Stop dynamic passage updates and clean up timer
+    this.stopDynamicPassageUpdates();
+    
     // Remove keyboard event listener
     window.removeEventListener('keydown', this.keydownHandler);
   }
@@ -754,6 +865,9 @@ export default class PlinkoEngine {
     );
 
     Matter.Composite.add(this.engine.world, this.readyBall);
+    
+    // Start dynamic passage updates to show they're changing
+    this.startDynamicPassageUpdates();
   }
 
   private updateReadyBall() {
@@ -796,6 +910,13 @@ export default class PlinkoEngine {
     }
 
     console.log('Dropping ball...');
+
+    // STOP dynamic passage updates and set final positions
+    this.stopDynamicPassageUpdates();
+    console.log('Dynamic passage updates stopped - generating final passage positions...');
+    
+    // Generate final passage positions one last time
+    this.generateFinalPassagePositions();
 
     // Reset multiplier and set starting row
     this.currentMultiplier = 1.0;
@@ -867,6 +988,22 @@ export default class PlinkoEngine {
         this.createReadyBall();
       }
     });
+  }
+
+  private generateFinalPassagePositions() {
+    console.log('Generating final passage positions...');
+    
+    // Update all death passages to new random positions
+    for (const [rowY, deathPassage] of this.rowDeathPassages.entries()) {
+      this.updatePassagePositionForRow(rowY, 'death');
+    }
+    
+    // Update all cash out passages to new random positions (avoiding death passages)
+    for (const [rowY, cashOutPassage] of this.rowCashOutPassages.entries()) {
+      this.updatePassagePositionForRow(rowY, 'cashout');
+    }
+    
+    console.log('Final passage positions set - they will remain fixed for this game.');
   }
 
   cashOut() {
@@ -1163,6 +1300,9 @@ export default class PlinkoEngine {
   // Add reset method to allow starting a new game
   public resetGame() {
     console.log('Resetting game...');
+    
+    // Stop any ongoing dynamic passage updates first
+    this.stopDynamicPassageUpdates();
     
     // Clear explosion state first
     this.isGameDead = false;
