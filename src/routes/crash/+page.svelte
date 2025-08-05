@@ -42,16 +42,16 @@
 
 <div class="relative flex min-h-dvh w-full flex-col bg-gray-900">
   <!-- Top Navigation Bar -->
-  <div class="absolute top-4 left-4 right-4 z-10 flex items-center justify-between">
+  <div class="absolute top-2 left-4 right-4 z-10 flex items-center justify-between">
     <!-- Risk Level Selector -->
-    <div class="flex flex-col gap-1">
+    <div class="flex flex-col gap-0.5">
       <label class="text-xs font-medium text-slate-400">Risk Level</label>
       <div class="flex gap-1 rounded-full bg-slate-900 p-0.5">
         {#each riskLevels as { value, label, pins }}
           <button
             onclick={() => handleRiskChange(value)}
             disabled={isGameInProgress}
-            class="rounded-full py-1 px-3 text-xs font-medium text-white transition hover:not-disabled:bg-slate-600 active:not-disabled:bg-slate-500 disabled:cursor-not-allowed disabled:opacity-50 {$riskLevel === value ? 'bg-slate-600' : ''} flex flex-col items-center"
+            class="rounded-full py-0.5 px-2 text-xs font-medium text-white transition hover:not-disabled:bg-slate-600 active:not-disabled:bg-slate-500 disabled:cursor-not-allowed disabled:opacity-50 {$riskLevel === value ? 'bg-slate-600' : ''} flex flex-col items-center"
           >
             <span>{label}</span>
             <span class="text-xs opacity-75">{pins}</span>
@@ -65,7 +65,7 @@
       {#each gameTypes as { value, label }}
         <button
           onclick={() => handleGameChange(value)}
-          class="flex-1 rounded-full py-1 px-4 text-sm font-medium text-white transition hover:bg-slate-600 active:bg-slate-500 {$page.url.pathname === value ? 'bg-slate-600' : ''}"
+          class="flex-1 rounded-full py-0.5 px-3 text-xs font-medium text-white transition hover:bg-slate-600 active:bg-slate-500 {$page.url.pathname === value ? 'bg-slate-600' : ''}"
         >
           {label}
         </button>
@@ -74,7 +74,7 @@
   </div>
 
   <div class="flex-1 px-5">
-    <div class="mx-auto mt-5 max-w-xl min-w-[300px] drop-shadow-xl md:mt-10 lg:max-w-7xl">
+    <div class="mx-auto mt-3 max-w-xl min-w-[300px] drop-shadow-xl md:mt-6 lg:max-w-7xl">
       <div class="flex flex-col-reverse overflow-hidden rounded-lg lg:w-full lg:flex-row bg-gray-900">
         <div class="flex-1">
           <PlinkoSheep />

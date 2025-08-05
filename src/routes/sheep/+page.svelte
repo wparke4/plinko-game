@@ -22,12 +22,12 @@
 
 
 <div class="relative flex min-h-dvh w-full flex-col bg-gray-900">
-  <div class="absolute top-4 right-4 z-10">
+  <div class="absolute top-2 right-4 z-10">
     <div class="flex gap-1 rounded-full bg-slate-900 p-0.5">
       {#each gameTypes as { value, label }}
         <button
           onclick={() => handleGameChange(value)}
-          class="flex-1 rounded-full py-1 px-4 text-sm font-medium text-white transition hover:bg-slate-600 active:bg-slate-500 {$page.url.pathname === value ? 'bg-slate-600' : ''}"
+          class="flex-1 rounded-full py-0.5 px-3 text-xs font-medium text-white transition hover:bg-slate-600 active:bg-slate-500 {$page.url.pathname === value ? 'bg-slate-600' : ''}"
         >
           {label}
         </button>
@@ -36,7 +36,7 @@
   </div>
 
   <div class="flex-1 px-5">
-    <div class="mx-auto mt-5 max-w-xl min-w-[300px] drop-shadow-xl md:mt-10 lg:max-w-7xl">
+    <div class="mx-auto mt-3 max-w-xl min-w-[300px] drop-shadow-xl md:mt-6 lg:max-w-7xl">
       <div class="flex flex-col-reverse overflow-hidden rounded-lg lg:w-full lg:flex-row bg-gray-900">
         <div class="flex-1">
           <PlinkoCrash />
