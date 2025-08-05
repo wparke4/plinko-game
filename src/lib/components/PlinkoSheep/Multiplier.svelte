@@ -3,9 +3,11 @@
   import { isMultiplierFlashing } from '$lib/stores/game';
   
   export let multiplier: number = 0;
+  
+  $: isGameStarted = multiplier > 0;
 </script>
 
-<div class="multiplier" class:flashing={$isMultiplierFlashing}>
+<div class="multiplier" class:flashing={$isMultiplierFlashing} class:game-started={isGameStarted}>
   {multiplier.toFixed(2)}x
 </div>
 
@@ -13,9 +15,13 @@
   .multiplier {
     font-size: 2.5rem;
     font-weight: bold;
-    color: white;
+    color: rgba(255, 255, 255, 0.8); /* Off-white for 0.00x */
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
     transition: all 0.2s ease;
+  }
+
+  .multiplier.game-started {
+    color: rgba(255, 255, 255, 1); /* Pure white when game starts */
   }
   
   .multiplier.flashing {

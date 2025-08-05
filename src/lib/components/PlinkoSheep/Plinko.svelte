@@ -77,8 +77,13 @@
   :global(.multiplier) {
     font-size: min(3rem, 6vh);
     font-weight: bold;
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, 0.8); /* Off-white for 0.00x */
     text-align: center;
+    transition: color 0.2s ease;
+  }
+
+  :global(.multiplier.game-started) {
+    color: rgba(255, 255, 255, 1); /* Pure white when game starts */
   }
 
   .multiplier-container {
