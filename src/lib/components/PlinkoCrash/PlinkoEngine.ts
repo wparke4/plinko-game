@@ -256,12 +256,16 @@ export default class PlinkoEngine {
     this.rowPinPositions.set(rowY, rowPins);
     Matter.Composite.add(this.engine.world, rowPins);
     
-    // Create death passage for this row
-    this.createDeathPassage(rowY, isOffset);
-    
-    // Create cash out passage for every 3rd row starting from row 3
+    // Calculate row index for passage placement
     const rowIndex = Math.floor((rowY - this.firstVisibleRowY) / PlinkoEngine.ROW_HEIGHT);
-    if ((rowIndex + 1) % 3 === 0) {
+    
+    // Create death passage for odd rows (1, 3, 5, etc.)
+    if ((rowIndex + 1) % 2 === 1) {
+      this.createDeathPassage(rowY, isOffset);
+    }
+    
+    // Create cash out passage for even rows (2, 4, 6, etc.)
+    if ((rowIndex + 1) % 2 === 0) {
       this.createCashOutPassage(rowY, isOffset);
     }
   }
