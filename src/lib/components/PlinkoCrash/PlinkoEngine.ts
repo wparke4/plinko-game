@@ -89,11 +89,14 @@ export default class PlinkoEngine {
   private celebratingBall: Matter.Body | null = null;
   private isCashOutComplete: boolean = false;
 
-  // Dynamic passage movement properties (for pre-game state)
-  private dynamicPassageTimers: Map<number, NodeJS.Timeout> = new Map(); // Row Y -> Timer mapping
-  private readonly MIN_DYNAMIC_PASSAGE_INTERVAL = 600; // Minimum interval between updates
-  private readonly MAX_DYNAMIC_PASSAGE_INTERVAL = 1200; // Maximum interval between updates
-  private isDynamicPassagesActive: boolean = false;
+
+
+  // Preview passage system properties (new teasing mechanism)
+  private previewPassages: Matter.Body[] = [];
+  private rowPreviewPassages: Map<number, Matter.Body[]> = new Map(); // Row Y -> Preview passages array
+  private previewOpacityTimers: Map<number, NodeJS.Timeout> = new Map(); // Row Y -> Opacity timer
+  private readonly PREVIEW_OPACITY_UPDATE_INTERVAL = 100; // Update opacity every 100ms
+  private isPreviewPassagesActive: boolean = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -273,6 +276,9 @@ export default class PlinkoEngine {
     this.rowPinPositions.clear();
     this.rowDeathPassages.clear();
     this.rowCashOutPassages.clear();
+    
+    // Clear preview passages
+    this.clearAllPreviewPassages();
   }
 
     private createRowOfPins(rowY: number, pinCount: number, isOffset: boolean = false) {
@@ -317,15 +323,8 @@ export default class PlinkoEngine {
     // Calculate row index for passage placement
     const rowIndex = Math.floor((rowY - this.firstVisibleRowY) / PlinkoEngine.ROW_HEIGHT);
     
-    // Create death passage for odd rows (1, 3, 5, etc.)
-    if ((rowIndex + 1) % 2 === 1) {
-      this.createDeathPassage(rowY, isOffset);
-    }
-    
-    // Create cash out passage for even rows (2, 4, 6, etc.)
-    if ((rowIndex + 1) % 2 === 0) {
-      this.createCashOutPassage(rowY, isOffset);
-    }
+    // Create preview passages for this row (shows all possible positions with animated opacity)
+    this.createPreviewPassages(rowY, isOffset, rowIndex);
   }
 
   private createDeathPassage(rowY: number, isOffset: boolean) {
@@ -461,81 +460,23 @@ export default class PlinkoEngine {
     Matter.Composite.add(this.engine.world, cashOutPassage);
   }
 
-  private startDynamicPassageUpdates() {
-    // Don't start if already active or if game is in progress
-    if (this.isDynamicPassagesActive || this.isGameInProgress()) {
-      return;
-    }
-
-    console.log('Starting dynamic passage updates...');
-    this.isDynamicPassagesActive = true;
-    
-    this.dynamicPassageTimers.clear(); // Clear any existing timers
-
-    // Get all unique row Y positions that have passages
-    const allRowsWithPassages = new Set<number>();
-    this.rowDeathPassages.forEach((_, rowY) => allRowsWithPassages.add(rowY));
-    this.rowCashOutPassages.forEach((_, rowY) => allRowsWithPassages.add(rowY));
-
-    // Set up one timer per row that handles all passages in that row
-    for (const rowY of allRowsWithPassages) {
-      const interval = this.MIN_DYNAMIC_PASSAGE_INTERVAL + Math.random() * (this.MAX_DYNAMIC_PASSAGE_INTERVAL - this.MIN_DYNAMIC_PASSAGE_INTERVAL);
-      
-      const timer = setInterval(() => {
-        // Only update if we're still in ready state (not in game)
-        if (this.readyBall && !this.isGameInProgress()) {
-          this.updateAllPassagesForRow(rowY);
-        } else {
-          // Stop updates if game state changed
-          this.stopDynamicPassageUpdates();
-        }
-      }, interval);
-      
-      this.dynamicPassageTimers.set(rowY, timer);
-    }
-  }
-
-  private updateAllPassagesForRow(rowY: number) {
-    // Update death passage if it exists for this row
-    if (this.rowDeathPassages.has(rowY)) {
-      this.updatePassagePositionForRow(rowY, 'death');
-    }
-    
-    // Update cash out passage if it exists for this row
-    if (this.rowCashOutPassages.has(rowY)) {
-      this.updatePassagePositionForRow(rowY, 'cashout');
-    }
-  }
-
-  private stopDynamicPassageUpdates() {
-    if (this.dynamicPassageTimers.size === 0) {
-      return;
-    }
-    console.log('Stopping dynamic passage updates...');
-    this.dynamicPassageTimers.forEach(clearInterval);
-    this.dynamicPassageTimers.clear();
-    this.isDynamicPassagesActive = false;
-  }
-
-  private updatePassagePositionForRow(rowY: number, passageType: 'death' | 'cashout') {
-    const { REFERENCE_PIN_SPACING } = PlinkoEngine;
+  private createPreviewPassages(rowY: number, isOffset: boolean, rowIndex: number) {
+    const { REFERENCE_PIN_SPACING, DEATH_PASSAGE_WIDTH, DEATH_PASSAGE_HEIGHT } = PlinkoEngine;
     
     // Use fixed pin spacing and dynamic padding
     const pinSpacing = REFERENCE_PIN_SPACING;
     const paddingX = this.currentGameAreaPaddingX;
-    const rowIndex = Math.floor((rowY - this.firstVisibleRowY) / PlinkoEngine.ROW_HEIGHT);
-    const isOffset = rowIndex % 2 === 1;
     
     // Calculate number of passages (spaces between pins)
     const numPassages = isOffset ? this.currentPinsPerRow - 2 : this.currentPinsPerRow - 1;
     
-    // Get both passages for this row to avoid conflicts
-    const deathPassage = this.rowDeathPassages.get(rowY);
-    const cashOutPassage = this.rowCashOutPassages.get(rowY);
+    // Determine if this is a death row or cash out row
+    const isDeathRow = (rowIndex + 1) % 2 === 1;
+    const rowPreviewPassages: Matter.Body[] = [];
     
-    // Find available positions for the passage type we're updating
-    const availablePassages: number[] = [];
+    // Create preview passages for all possible positions in this row
     for (let i = 0; i < numPassages; i++) {
+      // Calculate the X position of this passage
       let passageX: number;
       if (isOffset) {
         passageX = paddingX + (pinSpacing / 2) + (i * pinSpacing) + (pinSpacing / 2);
@@ -543,43 +484,152 @@ export default class PlinkoEngine {
         passageX = paddingX + (i * pinSpacing) + (pinSpacing / 2);
       }
       
-      // Check if this position conflicts with the other passage type
-      let hasConflict = false;
-      if (passageType === 'death' && cashOutPassage) {
-        hasConflict = Math.abs(cashOutPassage.position.x - passageX) < pinSpacing / 4;
-      } else if (passageType === 'cashout' && deathPassage) {
-        hasConflict = Math.abs(deathPassage.position.x - passageX) < pinSpacing / 4;
-      }
+      // Create the preview passage with initial opacity
+      const previewPassage = Matter.Bodies.rectangle(
+        passageX,
+        rowY,
+        DEATH_PASSAGE_WIDTH, // Use same size for both types
+        DEATH_PASSAGE_HEIGHT,
+        {
+          isStatic: true,
+          isSensor: true,
+          render: {
+            fillStyle: isDeathRow ? 'rgba(255, 0, 68, 0.5)' : 'rgba(0, 255, 68, 0.5)', // Semi-transparent red or green
+            strokeStyle: isDeathRow ? 'rgba(255, 102, 102, 0.8)' : 'rgba(102, 255, 102, 0.8)',
+            lineWidth: 2,
+          },
+          collisionFilter: {
+            category: 0, // No collision category - these are just visual previews
+            mask: 0,
+          },
+        }
+      );
       
-      if (!hasConflict) {
-        availablePassages.push(i);
+      rowPreviewPassages.push(previewPassage);
+      this.previewPassages.push(previewPassage);
+    }
+    
+    // Store the preview passages for this row
+    this.rowPreviewPassages.set(rowY, rowPreviewPassages);
+    Matter.Composite.add(this.engine.world, rowPreviewPassages);
+    
+    // Start opacity animation for this row
+    this.startPreviewOpacityAnimation(rowY, isDeathRow);
+  }
+
+  private startPreviewOpacityAnimation(rowY: number, isDeathRow: boolean) {
+    // Clear any existing timer for this row
+    if (this.previewOpacityTimers.has(rowY)) {
+      clearInterval(this.previewOpacityTimers.get(rowY)!);
+    }
+
+    const timer = setInterval(() => {
+      // Only animate if we're still in ready state (not in game)
+      if (this.readyBall && !this.isGameInProgress()) {
+        this.updatePreviewOpacityForRow(rowY, isDeathRow);
+      } else {
+        // Stop animation if game state changed
+        this.stopPreviewOpacityAnimation(rowY);
       }
-    }
+    }, this.PREVIEW_OPACITY_UPDATE_INTERVAL);
     
-    if (availablePassages.length === 0) {
-      return; // No available positions
-    }
+    this.previewOpacityTimers.set(rowY, timer);
+    this.isPreviewPassagesActive = true;
+  }
+
+  private updatePreviewOpacityForRow(rowY: number, isDeathRow: boolean) {
+    const rowPassages = this.rowPreviewPassages.get(rowY);
+    if (!rowPassages) return;
     
-    // Randomly select a new position
-    const newPassageIndex = availablePassages[Math.floor(Math.random() * availablePassages.length)];
+    const time = Date.now();
+    const rowIndex = Math.floor((rowY - this.firstVisibleRowY) / PlinkoEngine.ROW_HEIGHT);
     
-    // Calculate the new X position
-    let newPassageX: number;
-    if (isOffset) {
-      newPassageX = paddingX + (pinSpacing / 2) + (newPassageIndex * pinSpacing) + (pinSpacing / 2);
-    } else {
-      newPassageX = paddingX + (newPassageIndex * pinSpacing) + (pinSpacing / 2);
-    }
+    // Create row-specific behavior by using row index as seed
+    const rowSeed = rowIndex * 1337; // Different seed per row
+    const rowSpeed = 0.002 + (rowIndex % 3) * 0.001; // Vary speed per row: 0.002, 0.003, 0.004
+    const rowPhaseOffset = (rowIndex * Math.PI) / 3; // Different phase offset per row
     
-    // Update the passage position
-    const passage = passageType === 'death' ? deathPassage : cashOutPassage;
-    if (passage) {
-      Matter.Body.setPosition(passage, {
-        x: newPassageX,
-        y: passage.position.y
+    // Target: only show about 1/4 of the passages at any time
+    const targetVisibleCount = Math.max(1, Math.ceil(rowPassages.length / 4));
+    let currentlyVisible = 0;
+    
+    // First pass: calculate which passages should be visible based on their natural cycles
+    const passageStates: Array<{passage: Matter.Body, targetOpacity: number, index: number}> = [];
+    
+    for (let i = 0; i < rowPassages.length; i++) {
+      const passage = rowPassages[i];
+      if (!passage.render) continue;
+      
+      // Each passage has its own cycle with row-specific modifications
+      const passagePhase = rowPhaseOffset + (i * Math.PI * 2) / rowPassages.length + (rowSeed * 0.001);
+      const passageSpeed = rowSpeed + (i * 0.0003); // Slight speed variation per passage
+      
+      // Use sine wave to determine if this passage wants to be visible
+      const cycle = Math.sin(time * passageSpeed + passagePhase);
+      
+      // Convert sine wave (-1 to 1) to a "desire to be visible" (0 to 1)
+      const visibilityDesire = (cycle + 1) / 2;
+      
+      passageStates.push({
+        passage,
+        targetOpacity: visibilityDesire,
+        index: i
       });
     }
+    
+    // Sort by visibility desire (highest first)
+    passageStates.sort((a, b) => b.targetOpacity - a.targetOpacity);
+    
+    // Only make the top half visible, fade out the rest
+    for (let i = 0; i < passageStates.length; i++) {
+      const { passage, targetOpacity, index } = passageStates[i];
+      
+      let finalOpacity: number;
+      
+      if (i < targetVisibleCount) {
+        // This passage gets to be visible - use its natural opacity (0.3 to 0.9)
+        finalOpacity = 0.3 + (targetOpacity * 0.6);
+        currentlyVisible++;
+      } else {
+        // This passage should be hidden/very faint (0.0 to 0.15)
+        finalOpacity = targetOpacity * 0.15;
+      }
+      
+      // Update the passage color with calculated opacity
+      if (isDeathRow) {
+        passage.render.fillStyle = `rgba(255, 0, 68, ${finalOpacity})`;
+        passage.render.strokeStyle = `rgba(255, 102, 102, ${Math.min(finalOpacity + 0.2, 1)})`;
+      } else {
+        passage.render.fillStyle = `rgba(0, 255, 68, ${finalOpacity})`;
+        passage.render.strokeStyle = `rgba(102, 255, 102, ${Math.min(finalOpacity + 0.2, 1)})`;
+      }
+    }
   }
+
+  private stopPreviewOpacityAnimation(rowY: number) {
+    const timer = this.previewOpacityTimers.get(rowY);
+    if (timer) {
+      clearInterval(timer);
+      this.previewOpacityTimers.delete(rowY);
+    }
+  }
+
+  private stopAllPreviewOpacityAnimations() {
+    this.previewOpacityTimers.forEach(clearInterval);
+    this.previewOpacityTimers.clear();
+    this.isPreviewPassagesActive = false;
+  }
+
+  private clearAllPreviewPassages() {
+    if (this.previewPassages.length > 0) {
+      Matter.Composite.remove(this.engine.world, this.previewPassages);
+      this.previewPassages = [];
+    }
+    this.rowPreviewPassages.clear();
+    this.stopAllPreviewOpacityAnimations();
+  }
+
+
 
   private createExplosion(x: number, y: number) {
     console.log('Creating explosion at:', { x, y });
@@ -807,8 +857,8 @@ export default class PlinkoEngine {
     Matter.Render.stop(this.render);
     Matter.Engine.clear(this.engine);
     
-    // Stop dynamic passage updates and clean up timer
-    this.stopDynamicPassageUpdates();
+    // Stop preview passage animations and clean up timers
+    this.stopAllPreviewOpacityAnimations();
     
     // Remove keyboard event listener
     window.removeEventListener('keydown', this.keydownHandler);
@@ -933,6 +983,15 @@ export default class PlinkoEngine {
           this.rowCashOutPassages.delete(rowY);
         }
         
+        // Also clean up preview passages for this row
+        const previewPassages = this.rowPreviewPassages.get(rowY);
+        if (previewPassages) {
+          Matter.Composite.remove(this.engine.world, previewPassages);
+          this.previewPassages = this.previewPassages.filter(pp => !previewPassages.includes(pp));
+          this.rowPreviewPassages.delete(rowY);
+          this.stopPreviewOpacityAnimation(rowY);
+        }
+        
         if (this.rowPinPositions.size > 0) {
           this.firstVisibleRowY = Math.min(...this.rowPinPositions.keys());
         }
@@ -966,8 +1025,7 @@ export default class PlinkoEngine {
 
     Matter.Composite.add(this.engine.world, this.readyBall);
     
-    // Start dynamic passage updates to show they're changing
-    this.startDynamicPassageUpdates();
+    // Preview passages are already created and animating from createPreviewPassages calls
   }
 
   private updateReadyBall() {
@@ -1013,9 +1071,8 @@ export default class PlinkoEngine {
 
     console.log('Dropping ball...');
 
-    // STOP dynamic passage updates and set final positions
-    this.stopDynamicPassageUpdates();
-    console.log('Dynamic passage updates stopped - generating final passage positions...');
+    // Generate final passage positions (this will stop preview animations and create actual passages)
+    console.log('Stopping preview animations and generating final passage positions...');
     
     // Generate final passage positions one last time
     this.generateFinalPassagePositions();
@@ -1093,19 +1150,43 @@ export default class PlinkoEngine {
   }
 
   private generateFinalPassagePositions() {
-    console.log('Generating final passage positions...');
+    console.log('Generating final passage positions and replacing preview passages...');
     
-    // Get all unique row Y positions that have passages and update them all
-    const allRowsWithPassages = new Set<number>();
-    this.rowDeathPassages.forEach((_, rowY) => allRowsWithPassages.add(rowY));
-    this.rowCashOutPassages.forEach((_, rowY) => allRowsWithPassages.add(rowY));
+    // Stop all preview animations first
+    this.stopAllPreviewOpacityAnimations();
     
-    // Update all passages for each row
-    for (const rowY of allRowsWithPassages) {
-      this.updateAllPassagesForRow(rowY);
+    // Get all unique row Y positions that have preview passages
+    const allRowsWithPreviews = new Set<number>();
+    this.rowPreviewPassages.forEach((_, rowY) => allRowsWithPreviews.add(rowY));
+    
+    // For each row, remove preview passages and create actual passages
+    for (const rowY of allRowsWithPreviews) {
+      // Calculate row index to determine passage type
+      const rowIndex = Math.floor((rowY - this.firstVisibleRowY) / PlinkoEngine.ROW_HEIGHT);
+      const isOffset = rowIndex % 2 === 1;
+      const isDeathRow = (rowIndex + 1) % 2 === 1;
+      
+      // Remove preview passages for this row
+      const previewPassages = this.rowPreviewPassages.get(rowY);
+      if (previewPassages) {
+        Matter.Composite.remove(this.engine.world, previewPassages);
+        // Remove from main preview passages array
+        this.previewPassages = this.previewPassages.filter(p => !previewPassages.includes(p));
+      }
+      
+      // Create actual passage for this row
+      if (isDeathRow) {
+        this.createDeathPassage(rowY, isOffset);
+      } else {
+        this.createCashOutPassage(rowY, isOffset);
+      }
     }
     
-    console.log('Final passage positions set - they will remain fixed for this game.');
+    // Clear all preview passage data
+    this.rowPreviewPassages.clear();
+    this.previewPassages = [];
+    
+    console.log('Final passage positions set - preview passages replaced with actual passages!');
   }
 
   cashOut() {
@@ -1403,8 +1484,8 @@ export default class PlinkoEngine {
   public resetGame() {
     console.log('Resetting game...');
     
-    // Stop any ongoing dynamic passage updates first
-    this.stopDynamicPassageUpdates();
+    // Stop any ongoing preview passage animations first
+    this.stopAllPreviewOpacityAnimations();
     
     // Clear explosion state first
     this.isGameDead = false;
