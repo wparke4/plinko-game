@@ -42,6 +42,10 @@
   function handleResetClick() {
     $plinkoEngine?.resetGame();
   }
+
+  function handleCashOutClick() {
+    $plinkoEngine?.cashOut();
+  }
 </script>
 
 <div class="relative bg-gray-900">
@@ -73,7 +77,14 @@
             <span class="text-sm font-normal">(spacebar)</span>
           </button>
         {:else if isGameInProgress}
-          <!-- State 2: Game in progress - no buttons visible -->
+          <!-- State 2: Game in progress - show Cash Out button -->
+          <button
+            onclick={handleCashOutClick}
+            class="touch-manipulation rounded-md bg-blue-500 py-2 px-6 font-semibold text-white transition-colors hover:bg-blue-400 active:bg-blue-600 flex flex-col"
+          >
+            <span>Cash Out</span>
+            <span class="text-sm font-normal">(spacebar)</span>
+          </button>
         {:else if isGameEnded}
           <!-- State 3: Game ended - only show Reset Game button -->
           <button
