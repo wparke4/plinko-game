@@ -1,6 +1,6 @@
 <!-- Plinko.svelte -->
 <script lang="ts">
-  import { plinkoEngine, betAmount, balance, currentMultiplier } from '$lib/stores/game';
+  import { plinkoEngine, betAmount, balance, currentMultiplier, gameState } from '$lib/stores/game';
   import CircleNotch from 'phosphor-svelte/lib/CircleNotch';
   import type { Action } from 'svelte/action';
   import LastWins from './LastWins.svelte';
@@ -20,10 +20,20 @@
     };
   };
 
+  let isBetAmountNegative = $derived($betAmount < 0);
+  let isBetExceedBalance = $derived($betAmount > $balance);
   let isDropBallDisabled = $derived(
-    $plinkoEngine === null
+    $plinkoEngine === null || isBetAmountNegative || isBetExceedBalance
   );
-  let isGameInProgress = $derived($plinkoEngine?.isGameInProgress() ?? false);
+  // Use reactive game state store instead of calling engine methods
+  let isGameInProgress = $derived($gameState.isGameInProgress);
+  let isGameDead = $derived($gameState.isGameDead);
+  let isCashOutCelebrating = $derived($gameState.isCashOutCelebrating);
+  let isCashOutComplete = $derived($gameState.isCashOutComplete);
+
+  // Game state logic
+  let isBeforeGame = $derived(!isGameInProgress && !isGameDead && !isCashOutCelebrating && !isCashOutComplete);
+  let isGameEnded = $derived(isGameDead || isCashOutCelebrating || isCashOutComplete);
 
   function handleBetClick() {
     $plinkoEngine?.dropBall();
@@ -52,19 +62,28 @@
         <Multiplier multiplier={$currentMultiplier} />
       </div>
       <div class="flex gap-4">
-        <button
-          onclick={handleBetClick}
-          disabled={isDropBallDisabled}
-          class="touch-manipulation rounded-md bg-green-500 py-3 px-8 font-semibold text-slate-900 transition-colors hover:bg-green-400 active:bg-green-600 disabled:bg-neutral-600 disabled:text-neutral-400"
-        >
-          Drop Ball
-        </button>
-        <button
-          onclick={handleResetClick}
-          class="touch-manipulation rounded-md bg-red-500 py-3 px-8 font-semibold text-white transition-colors hover:bg-red-400 active:bg-red-600"
-        >
-          Reset Game
-        </button>
+        {#if isBeforeGame}
+          <!-- State 1: Before game - only show Drop Ball button -->
+          <button
+            onclick={handleBetClick}
+            disabled={isDropBallDisabled}
+            class="touch-manipulation rounded-md bg-green-500 py-2 px-6 font-semibold text-slate-900 transition-colors hover:bg-green-400 active:bg-green-600 disabled:bg-neutral-600 disabled:text-neutral-400 flex flex-col"
+          >
+            <span>Drop Ball</span>
+            <span class="text-sm font-normal">(spacebar)</span>
+          </button>
+        {:else if isGameInProgress}
+          <!-- State 2: Game in progress - no buttons visible -->
+        {:else if isGameEnded}
+          <!-- State 3: Game ended - only show Reset Game button -->
+          <button
+            onclick={handleResetClick}
+            class="touch-manipulation rounded-md bg-gray-100 py-2 px-6 font-semibold text-black transition-colors hover:bg-gray-200 active:bg-gray-300 flex flex-col"
+          >
+            <span>Play Again</span>
+            <span class="text-sm font-normal">(spacebar)</span>
+          </button>
+        {/if}
       </div>
     </div>
   </div>

@@ -1,5 +1,5 @@
 import Matter from 'matter-js';
-import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory, currentMultiplier, isMultiplierFlashing, riskLevel } from '$lib/stores/game';
+import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory, currentMultiplier, isMultiplierFlashing, riskLevel, gameState } from '$lib/stores/game';
 import { RiskLevel, type RowCount } from '$lib/types';
 import { get } from 'svelte/store';
 
@@ -606,6 +606,9 @@ export default class PlinkoEngine {
     Matter.Render.run(this.render);
     this.createReadyBall();
 
+    // Initialize game state for UI reactivity
+    this.updateGameState();
+
     // Add event listener for ready ball movement
     Matter.Events.on(this.engine, 'beforeUpdate', () => {
       this.updateReadyBall();
@@ -789,6 +792,7 @@ export default class PlinkoEngine {
 
   dropBall() {
     const currentBetAmount = get(betAmount);
+    const currentBalance = get(balance);
 
     // Prevent dropping balls if game is dead - player must reset first
     if (this.isGameDead) {
@@ -802,7 +806,7 @@ export default class PlinkoEngine {
       return;
     }
 
-    if (!this.readyBall) {
+    if (currentBetAmount <= 0 || currentBetAmount > currentBalance || !this.readyBall) {
       return;
     }
 
@@ -820,7 +824,8 @@ export default class PlinkoEngine {
     this.lastPlayerRowY = 0;
     this.killerDeathPassage = null;
 
-    // Balance system disabled - no deduction needed
+    // Deduct bet amount from balance
+    balance.update((b) => b - currentBetAmount);
 
     // Create ball at ready ball's position
     const startX = this.readyBall.position.x;
@@ -860,6 +865,9 @@ export default class PlinkoEngine {
       isCameraTracking: this.isCameraTracking,
       ballPosition: ball.position
     });
+
+    // Update game state for UI reactivity
+    this.updateGameState();
 
     // Track ball and its bet amount
     this.activeBalls.set(ball, currentBetAmount);
@@ -965,6 +973,9 @@ export default class PlinkoEngine {
     
     // Stop camera tracking immediately - game is paused during celebration
     this.isCameraTracking = false;
+
+    // Update game state for UI reactivity
+    this.updateGameState();
     
     // Reveal all visible death passages in grayed out state
     this.revealAllDeathPassagesGrayed();
@@ -1113,6 +1124,9 @@ export default class PlinkoEngine {
     // CREATE THE EXPLOSION! 🎆💥
     this.createExplosion(explosionX, explosionY);
 
+    // Update game state for UI reactivity
+    this.updateGameState();
+
     // Gray out all other death passages and highlight the killer
     this.highlightKillerDeathPassage();
 
@@ -1251,6 +1265,9 @@ export default class PlinkoEngine {
     // Create a new ready ball
     this.createReadyBall();
     
+    // Update game state for UI reactivity
+    this.updateGameState();
+    
     console.log('Game reset complete - ready for new game!');
   }
 
@@ -1371,6 +1388,9 @@ export default class PlinkoEngine {
     
     // Set flag that cash out is complete and waiting for player to start new game
     this.isCashOutComplete = true;
+    
+    // Update game state for UI reactivity
+    this.updateGameState();
     
     console.log('Cash out effects finished. Press spacebar or reset button to start new game.');
   }
@@ -1516,5 +1536,15 @@ export default class PlinkoEngine {
     
     // Restore canvas state
     ctx.restore();
+  }
+
+  // Update the reactive game state store
+  private updateGameState() {
+    gameState.set({
+      isGameInProgress: this.isGameInProgress(),
+      isGameDead: this.isGameDead,
+      isCashOutCelebrating: this.isCashOutCelebrating,
+      isCashOutComplete: this.isCashOutComplete
+    });
   }
 }
