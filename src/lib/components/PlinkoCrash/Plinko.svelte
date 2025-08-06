@@ -116,6 +116,10 @@
     color: rgba(255, 255, 255, 1); /* Pure white when game starts */
   }
 
+  :global(.multiplier.game-dead) {
+    color: rgba(255, 0, 0, 1); /* Bright red when game is dead */
+  }
+
   .multiplier-container {
     min-height: 3rem;
     display: flex;

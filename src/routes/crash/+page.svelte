@@ -5,7 +5,7 @@
 
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { plinkoEngine, riskLevel } from '$lib/stores/game';
+  import { plinkoEngine, riskLevel, gameState } from '$lib/stores/game';
   import { RiskLevel } from '$lib/types';
 
   // Update engine when risk level changes
@@ -27,13 +27,18 @@
     { value: RiskLevel.HIGH, label: 'Spicy 🥵', description: 'Higher risk, higher multipliers' },
   ];
 
-  let isGameInProgress = $derived($plinkoEngine?.isGameInProgress() ?? false);
+  // Use reactive gameState store instead of directly calling engine method
+  let isGameInProgress = $derived($gameState.isGameInProgress);
 
   function handleGameChange(path: string) {
     goto(path);
   }
 
   function handleRiskChange(newRisk: RiskLevel) {
+    // Prevent risk changes during gameplay
+    if (isGameInProgress) {
+      return;
+    }
     riskLevel.set(newRisk);
   }
 </script>
@@ -52,6 +57,7 @@
             onclick={() => handleRiskChange(value)}
             disabled={isGameInProgress}
             class="rounded-full py-1 px-3 text-sm font-medium text-white transition hover:not-disabled:bg-slate-600 active:not-disabled:bg-slate-500 disabled:cursor-not-allowed disabled:opacity-50 {$riskLevel === value ? 'bg-slate-600' : ''}"
+            title={isGameInProgress ? 'Cannot change risk level during gameplay' : ''}
           >
             {label}
           </button>
