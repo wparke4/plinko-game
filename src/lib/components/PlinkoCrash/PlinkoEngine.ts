@@ -653,49 +653,123 @@ export default class PlinkoEngine {
       this.explosionParticles = [];
     }
     
-    // Create multiple waves of explosion particles
-    const particleCount = 50; // Total number of particles
-    const colors = ['#EF4444', '#EF4444', '#EF4444', '#ffaa00', '#ffff00', '#ffffff'];
-    
-    for (let i = 0; i < particleCount; i++) {
-      // Create particles with random angles and speeds
-      const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.5;
-      const speed = 8 + Math.random() * 12; // Random speed between 8-20
-      const size = 3 + Math.random() * 8; // Random size between 3-11
-      
-      const particle = Matter.Bodies.circle(x, y, size, {
-        frictionAir: 0.02, // Low air friction so particles travel far
-        restitution: 0.8,
-        density: 0.001, // Very light particles
-        render: {
-          fillStyle: colors[Math.floor(Math.random() * colors.length)],
-          strokeStyle: '#ffffff',
-          lineWidth: 1,
-        },
-        collisionFilter: {
-          category: PlinkoEngine.EXPLOSION_CATEGORY,
-          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY, // Can collide with pins and walls
-        },
-      });
-      
-      // Set initial velocity in explosion direction
-      const velocityX = Math.cos(angle) * speed;
-      const velocityY = Math.sin(angle) * speed;
-      Matter.Body.setVelocity(particle, { x: velocityX, y: velocityY });
-      
-      this.explosionParticles.push(particle);
-    }
+    // Enhanced explosion with multiple particle types and better colors
+    this.createExplosionWave1(x, y); // Large chunks and primary blast
+    this.createExplosionWave2(x, y); // Medium particles and secondary effects
+    this.createExplosionWave3(x, y); // Small sparks and debris
     
     // Add all particles to the world
     Matter.Composite.add(this.engine.world, this.explosionParticles);
     
-    // Add screen shake effect by updating camera bounds rapidly
+    // Enhanced screen shake effect
     this.startScreenShake();
   }
 
+  private createExplosionWave1(x: number, y: number) {
+    // Wave 1: Large chunks with intense colors (primary blast)
+    const chunkCount = 20;
+    const chunkColors = ['#FF2D00', '#FF4500', '#FF6A00', '#FF8C00', '#FFB700']; // Red to orange gradient
+    
+    for (let i = 0; i < chunkCount; i++) {
+      const angle = (Math.PI * 2 * i) / chunkCount + (Math.random() - 0.5) * 0.3;
+      const speed = 15 + Math.random() * 10; // High speed for dramatic effect
+      const size = 8 + Math.random() * 6; // Large chunks (8-14)
+      
+      const particle = Matter.Bodies.circle(x, y, size, {
+        frictionAir: 0.015, // Less air friction for chunks
+        restitution: 0.9,
+        density: 0.002,
+        render: {
+          fillStyle: chunkColors[Math.floor(Math.random() * chunkColors.length)],
+          strokeStyle: '#FFFFFF',
+          lineWidth: 2,
+        },
+        collisionFilter: {
+          category: PlinkoEngine.EXPLOSION_CATEGORY,
+          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY,
+        },
+      });
+      
+      // Add some randomness to make it more chaotic
+      const velocityX = Math.cos(angle) * speed + (Math.random() - 0.5) * 4;
+      const velocityY = Math.sin(angle) * speed + (Math.random() - 0.5) * 4;
+      Matter.Body.setVelocity(particle, { x: velocityX, y: velocityY });
+      
+      this.explosionParticles.push(particle);
+    }
+  }
+
+  private createExplosionWave2(x: number, y: number) {
+    // Wave 2: Medium particles with mixed explosion colors
+    const mediumCount = 40;
+    const mediumColors = ['#FF4500', '#FF6A00', '#FF8C00', '#FFD700', '#FFF200', '#FF1493']; // Orange to yellow with some hot pink
+    
+    for (let i = 0; i < mediumCount; i++) {
+      const angle = (Math.PI * 2 * i) / mediumCount + (Math.random() - 0.5) * 0.4;
+      const speed = 10 + Math.random() * 12;
+      const size = 4 + Math.random() * 6; // Medium particles (4-10)
+      
+      const particle = Matter.Bodies.circle(x, y, size, {
+        frictionAir: 0.025,
+        restitution: 0.85,
+        density: 0.0015,
+        render: {
+          fillStyle: mediumColors[Math.floor(Math.random() * mediumColors.length)],
+          strokeStyle: '#FFFF00', // Yellow stroke for extra glow
+          lineWidth: 1.5,
+        },
+        collisionFilter: {
+          category: PlinkoEngine.EXPLOSION_CATEGORY,
+          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY,
+        },
+      });
+      
+      const velocityX = Math.cos(angle) * speed + (Math.random() - 0.5) * 6;
+      const velocityY = Math.sin(angle) * speed + (Math.random() - 0.5) * 6;
+      Matter.Body.setVelocity(particle, { x: velocityX, y: velocityY });
+      
+      this.explosionParticles.push(particle);
+    }
+  }
+
+  private createExplosionWave3(x: number, y: number) {
+    // Wave 3: Small sparks and hot debris
+    const sparkCount = 60;
+    const sparkColors = ['#FFD700', '#FFF200', '#FFFF00', '#FFFFFF', '#00BFFF', '#87CEEB']; // Yellow, white, and some blue accents
+    
+    for (let i = 0; i < sparkCount; i++) {
+      const angle = Math.PI * 2 * Math.random(); // Completely random directions for chaos
+      const speed = 8 + Math.random() * 18; // Very varied speeds
+      const size = 2 + Math.random() * 4; // Small sparks (2-6)
+      
+      const particle = Matter.Bodies.circle(x, y, size, {
+        frictionAir: 0.04, // Higher air friction for sparks (they slow down faster)
+        restitution: 0.7,
+        density: 0.001,
+        render: {
+          fillStyle: sparkColors[Math.floor(Math.random() * sparkColors.length)],
+          strokeStyle: '#FFFFFF',
+          lineWidth: 0.5,
+        },
+        collisionFilter: {
+          category: PlinkoEngine.EXPLOSION_CATEGORY,
+          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY,
+        },
+      });
+      
+      // Some sparks get extra boost for dramatic spread
+      const boost = Math.random() > 0.7 ? 1.5 : 1.0;
+      const velocityX = Math.cos(angle) * speed * boost;
+      const velocityY = Math.sin(angle) * speed * boost;
+      Matter.Body.setVelocity(particle, { x: velocityX, y: velocityY });
+      
+      this.explosionParticles.push(particle);
+    }
+  }
+
   private startScreenShake() {
-    const shakeIntensity = 15;
-    const shakeDuration = 1000; // 1 second
+    const maxShakeIntensity = 25; // Increased from 15
+    const shakeDuration = 1500; // Increased from 1000ms to 1.5 seconds
     const startTime = Date.now();
     
     const shakeInterval = setInterval(() => {
@@ -703,14 +777,37 @@ export default class PlinkoEngine {
       const progress = elapsed / shakeDuration;
       
       if (progress >= 1 || !this.isGameDead) {
+        // Reset camera to normal position when shake ends
+        Matter.Render.lookAt(this.render, {
+          min: { x: 0, y: this.cameraY },
+          max: { x: PlinkoEngine.WIDTH, y: this.cameraY + PlinkoEngine.HEIGHT }
+        });
         clearInterval(shakeInterval);
         return;
       }
       
-      // Reduce shake intensity over time
-      const currentIntensity = shakeIntensity * (1 - progress);
-      const offsetX = (Math.random() - 0.5) * currentIntensity;
-      const offsetY = (Math.random() - 0.5) * currentIntensity;
+      // More dramatic shake curve - starts intense, has a spike in the middle, then fades
+      let intensityMultiplier;
+      if (progress < 0.1) {
+        // Initial blast - very intense
+        intensityMultiplier = 1.0;
+      } else if (progress < 0.3) {
+        // Sharp drop
+        intensityMultiplier = 1.0 - ((progress - 0.1) / 0.2) * 0.4;
+      } else if (progress < 0.5) {
+        // Secondary explosion surge
+        intensityMultiplier = 0.6 + 0.3 * Math.sin((progress - 0.3) * Math.PI * 5);
+      } else {
+        // Gradual fade out
+        intensityMultiplier = 0.6 * (1 - ((progress - 0.5) / 0.5));
+      }
+      
+      const currentIntensity = maxShakeIntensity * intensityMultiplier;
+      
+      // Add some rotational chaos to the shake
+      const shakeAngle = Math.random() * Math.PI * 2;
+      const offsetX = Math.cos(shakeAngle) * currentIntensity + (Math.random() - 0.5) * currentIntensity * 0.5;
+      const offsetY = Math.sin(shakeAngle) * currentIntensity + (Math.random() - 0.5) * currentIntensity * 0.5;
       
       // Apply shake to camera bounds
       Matter.Render.lookAt(this.render, {
@@ -727,20 +824,69 @@ export default class PlinkoEngine {
     
     const elapsed = Date.now() - this.explosionStartTime;
     const progress = elapsed / this.explosionDuration;
+    const time = Date.now();
     
-    // Update particle appearance based on time (fade out)
-    for (const particle of this.explosionParticles) {
-      if (particle.render && particle.render.fillStyle) {
-        const alpha = Math.max(0, 1 - progress);
-        const baseColor = particle.render.fillStyle as string;
-        
-        // Extract RGB from hex color and add alpha
-        if (baseColor.startsWith('#')) {
-          const r = parseInt(baseColor.substr(1, 2), 16);
-          const g = parseInt(baseColor.substr(3, 2), 16);
-          const b = parseInt(baseColor.substr(5, 2), 16);
-          particle.render.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    // Update particle appearance based on time with enhanced effects
+    for (let i = 0; i < this.explosionParticles.length; i++) {
+      const particle = this.explosionParticles[i];
+      if (!particle.render || !particle.render.fillStyle) continue;
+      
+      const baseColor = particle.render.fillStyle as string;
+      
+      // Calculate alpha with more dramatic fade curve
+      let alpha;
+      if (progress < 0.2) {
+        // Start bright and stay bright for initial impact
+        alpha = 1.0;
+      } else if (progress < 0.7) {
+        // Gradual fade
+        alpha = 1.0 - ((progress - 0.2) / 0.5) * 0.6;
+      } else {
+        // Rapid final fade
+        alpha = 0.4 * (1 - ((progress - 0.7) / 0.3));
+      }
+      
+      // Add pulsing effect for larger particles (chunks and medium particles)
+      const particleRadius = (particle as any).circleRadius || particle.bounds.max.x - particle.bounds.min.x;
+      if (particleRadius > 6) { // Large and medium particles
+        const pulseSpeed = 0.008 + (i % 3) * 0.002; // Vary pulse speed per particle
+        const pulse = Math.sin(time * pulseSpeed + i) * 0.3 + 0.7; // 0.4 to 1.0
+        alpha *= pulse;
+      }
+      
+      // Add flickering effect for sparks
+      if (particleRadius <= 6) { // Small sparks
+        const flickerChance = 0.15; // 15% chance to flicker per frame
+        if (Math.random() < flickerChance) {
+          alpha *= 0.3; // Dim the spark momentarily
         }
+      }
+      
+      // Color temperature shift over time (hot to cool)
+      let finalColor = baseColor;
+      if (baseColor.startsWith('#')) {
+        const r = parseInt(baseColor.substr(1, 2), 16);
+        const g = parseInt(baseColor.substr(3, 2), 16);
+        const b = parseInt(baseColor.substr(5, 2), 16);
+        
+        // Shift colors cooler over time for more realistic fire effect
+        const coolFactor = progress * 0.3; // Don't cool too much
+        const cooledR = Math.max(0, r - coolFactor * 80);
+        const cooledG = Math.max(0, g - coolFactor * 40);
+        const cooledB = Math.min(255, b + coolFactor * 60); // Slight blue shift
+        
+        finalColor = `rgba(${Math.round(cooledR)}, ${Math.round(cooledG)}, ${Math.round(cooledB)}, ${Math.max(0, alpha)})`;
+      } else {
+        // Fallback for colors that don't start with #
+        finalColor = `rgba(255, 100, 0, ${Math.max(0, alpha)})`;
+      }
+      
+      particle.render.fillStyle = finalColor;
+      
+      // Update stroke with complementary effect
+      if (particle.render.strokeStyle) {
+        const strokeAlpha = Math.min(alpha * 1.5, 1.0); // Stroke stays visible longer
+        particle.render.strokeStyle = `rgba(255, 255, 255, ${Math.max(0, strokeAlpha)})`;
       }
     }
     
