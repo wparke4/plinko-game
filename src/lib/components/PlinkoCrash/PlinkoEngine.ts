@@ -5,7 +5,7 @@ import { get } from 'svelte/store';
 
 export default class PlinkoEngine {
   static readonly WIDTH = 800;
-  static readonly HEIGHT = 600;
+  static readonly HEIGHT = 530;
   static readonly BALL_RADIUS = 8;
   static readonly PEG_RADIUS = 4;
   static readonly PADDING_X = 35; // Slightly reduced padding to accommodate more pins

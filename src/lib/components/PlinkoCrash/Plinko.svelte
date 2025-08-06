@@ -59,7 +59,7 @@
 <div class="relative bg-black">
   <div class="mx-auto flex h-full flex-col px-4" style:max-width={`${WIDTH}px`}>
     <!-- Move multiplier above the game area -->
-    <div class="mb-4 flex justify-center">
+    <div class="mt-6 mb-4 flex justify-center">
       <div class="multiplier-container">
         <Multiplier multiplier={$currentMultiplier} />
       </div>
@@ -109,7 +109,7 @@
 
 <style>
   :global(.multiplier) {
-    font-size: min(3rem, 6vh);
+    font-size: min(3.6rem, 7.2vh);
     font-weight: bold;
     color: rgba(255, 255, 255, 0.8); /* Off-white for 0.00x */
     text-align: center;
