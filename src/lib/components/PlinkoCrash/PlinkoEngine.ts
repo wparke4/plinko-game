@@ -85,7 +85,7 @@ export default class PlinkoEngine {
   // Cash out celebration properties
   private isCashOutCelebrating: boolean = false;
   private celebrationStartTime: number = 0;
-  private celebrationDuration: number = 1500; // 3 seconds (extended for more celebration)
+  private celebrationDuration: number = 800; // Reduced from 1500ms to 800ms
   private celebratingBall: Matter.Body | null = null;
   private isCashOutComplete: boolean = false;
   
@@ -93,6 +93,14 @@ export default class PlinkoEngine {
   private celebrationParticles: Matter.Body[] = [];
   private celebrationPulseStartTime: number = 0;
   private ballOriginalRadius: number = 0;
+  
+  // Particle lifecycle properties
+  private particleLifecycleData: Map<Matter.Body, {
+    birthTime: number;
+    initialDirection: { x: number; y: number };
+    maxDistance: number;
+    type: 'golden' | 'green' | 'sparkle';
+  }> = new Map();
 
 
 
@@ -840,10 +848,11 @@ export default class PlinkoEngine {
       this.celebrationParticles = [];
     }
     
-    // Create multiple waves of celebratory particles
-    this.createGoldenShower(x, y); // Golden particles raining down
-    this.createCashOutBurst(x, y); // Immediate burst from ball
-    this.createSparkleRain(x, y); // Continuous sparkles
+    // Clear particle lifecycle data
+    this.particleLifecycleData.clear();
+    
+    // Create unified particle burst from ball that expands and contracts
+    this.createExpandingParticleBurst(x, y);
     
     // Add all particles to the world
     Matter.Composite.add(this.engine.world, this.celebrationParticles);
@@ -852,119 +861,126 @@ export default class PlinkoEngine {
     this.startScreenGlow();
   }
 
-  private createGoldenShower(x: number, y: number) {
-    // Golden particle shower falling from above the screen
-    const showerCount = 80;
-    const goldenColors = ['#FFD700', '#FFA500', '#FFFF00', '#FFE135', '#FFB347', '#F0E68C']; // Rich golds and yellows
+  private createExpandingParticleBurst(x: number, y: number) {
+    // Create a unified burst of particles that expand outward from the ball then contract back
+    const totalParticles = 60; // Total particle count across all types
+    const currentTime = Date.now();
     
-    for (let i = 0; i < showerCount; i++) {
-      // Spread particles across the top of the screen
-      const startX = (PlinkoEngine.WIDTH * Math.random());
-      const startY = this.cameraY - 50 - (Math.random() * 200); // Start above viewport
+    // Define particle type distribution
+    const goldenCount = 20;
+    const greenCount = 25;
+    const sparkleCount = 15;
+    
+    // Create golden particles
+    for (let i = 0; i < goldenCount; i++) {
+      const angle = (Math.PI * 2 * i) / goldenCount + (Math.random() - 0.5) * 0.3;
+      const speed = 6 + Math.random() * 8;
+      const maxDistance = 80 + Math.random() * 40; // How far they'll travel before returning
+      const size = 3 + Math.random() * 4;
       
-      const particle = Matter.Bodies.circle(startX, startY, 3 + Math.random() * 5, {
-        frictionAir: 0.02, // Gentle air resistance for floating effect
-        restitution: 0.6,
+      const particle = Matter.Bodies.circle(x, y, size, {
+        frictionAir: 0.001, // Very low friction so we can control movement manually
+        restitution: 0.8,
         density: 0.001,
         render: {
-          fillStyle: goldenColors[Math.floor(Math.random() * goldenColors.length)],
+          fillStyle: ['#FFD700', '#FFA500', '#FFFF00', '#FFE135'][Math.floor(Math.random() * 4)],
           strokeStyle: '#FFFFFF',
           lineWidth: 1,
         },
         collisionFilter: {
-          category: PlinkoEngine.EXPLOSION_CATEGORY, // Reuse explosion category
-          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY,
+          category: PlinkoEngine.EXPLOSION_CATEGORY,
+          mask: 0, // No collisions during celebration
         },
       });
       
-      // Add gentle downward and sideways motion
-      const horizontalDrift = (Math.random() - 0.5) * 4; // Gentle side-to-side drift
-      const downwardSpeed = 2 + Math.random() * 4; // Gentle falling speed
-      Matter.Body.setVelocity(particle, { x: horizontalDrift, y: downwardSpeed });
+      const direction = { x: Math.cos(angle), y: Math.sin(angle) };
+      Matter.Body.setVelocity(particle, { x: direction.x * speed, y: direction.y * speed });
+      
+      // Store lifecycle data
+      this.particleLifecycleData.set(particle, {
+        birthTime: currentTime,
+        initialDirection: direction,
+        maxDistance: maxDistance,
+        type: 'golden'
+      });
       
       this.celebrationParticles.push(particle);
     }
-  }
-
-  private createCashOutBurst(x: number, y: number) {
-    // Immediate burst of celebratory particles from the ball location
-    const burstCount = 50;
-    const burstColors = ['#00FF00', '#32CD32', '#90EE90', '#98FB98', '#00FA9A', '#00FF7F']; // Bright greens
     
-    for (let i = 0; i < burstCount; i++) {
-      const angle = (Math.PI * 2 * i) / burstCount + (Math.random() - 0.5) * 0.4;
-      const speed = 8 + Math.random() * 12; // Strong initial burst
-      const size = 4 + Math.random() * 6; // Medium to large particles
+    // Create green burst particles
+    for (let i = 0; i < greenCount; i++) {
+      const angle = (Math.PI * 2 * i) / greenCount + (Math.random() - 0.5) * 0.4;
+      const speed = 8 + Math.random() * 10;
+      const maxDistance = 60 + Math.random() * 50;
+      const size = 4 + Math.random() * 5;
       
       const particle = Matter.Bodies.circle(x, y, size, {
-        frictionAir: 0.03,
+        frictionAir: 0.001,
         restitution: 0.8,
-        density: 0.0015,
+        density: 0.001,
         render: {
-          fillStyle: burstColors[Math.floor(Math.random() * burstColors.length)],
+          fillStyle: ['#00FF00', '#32CD32', '#90EE90', '#00FA9A'][Math.floor(Math.random() * 4)],
           strokeStyle: '#FFFFFF',
-          lineWidth: 2,
+          lineWidth: 1.5,
         },
         collisionFilter: {
           category: PlinkoEngine.EXPLOSION_CATEGORY,
-          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY,
+          mask: 0,
         },
       });
       
-      const velocityX = Math.cos(angle) * speed + (Math.random() - 0.5) * 3;
-      const velocityY = Math.sin(angle) * speed + (Math.random() - 0.5) * 3;
-      Matter.Body.setVelocity(particle, { x: velocityX, y: velocityY });
+      const direction = { x: Math.cos(angle), y: Math.sin(angle) };
+      Matter.Body.setVelocity(particle, { x: direction.x * speed, y: direction.y * speed });
+      
+      this.particleLifecycleData.set(particle, {
+        birthTime: currentTime,
+        initialDirection: direction,
+        maxDistance: maxDistance,
+        type: 'green'
+      });
       
       this.celebrationParticles.push(particle);
     }
-  }
-
-  private createSparkleRain(x: number, y: number) {
-    // Continuous sparkle effect with small bright particles
-    const sparkleCount = 100;
-    const sparkleColors = ['#FFFFFF', '#FFFF00', '#FFD700', '#FFF8DC', '#F0F8FF', '#E0FFFF']; // Whites and light colors
     
+    // Create sparkle particles
     for (let i = 0; i < sparkleCount; i++) {
-      // Create sparkles in a wide area around the cash out point
-      const spreadRadius = 150;
-      const angle = Math.PI * 2 * Math.random();
-      const distance = Math.random() * spreadRadius;
-      const sparkleX = x + Math.cos(angle) * distance;
-      const sparkleY = y + Math.sin(angle) * distance;
+      const angle = Math.PI * 2 * Math.random(); // Random angles for sparkles
+      const speed = 4 + Math.random() * 12;
+      const maxDistance = 100 + Math.random() * 60;
+      const size = 2 + Math.random() * 3;
       
-      const size = 2 + Math.random() * 3; // Small sparkles
-      
-      const particle = Matter.Bodies.circle(sparkleX, sparkleY, size, {
-        frictionAir: 0.05, // Higher air resistance for gentle floating
+      const particle = Matter.Bodies.circle(x, y, size, {
+        frictionAir: 0.001,
         restitution: 0.9,
         density: 0.0005,
         render: {
-          fillStyle: sparkleColors[Math.floor(Math.random() * sparkleColors.length)],
+          fillStyle: ['#FFFFFF', '#FFFF00', '#FFD700', '#F0F8FF'][Math.floor(Math.random() * 4)],
           strokeStyle: '#FFFF00',
           lineWidth: 0.5,
         },
         collisionFilter: {
           category: PlinkoEngine.EXPLOSION_CATEGORY,
-          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY,
+          mask: 0,
         },
       });
       
-      // Random motion in all directions with upward bias for magical effect
-      const randomAngle = Math.PI * 2 * Math.random();
-      const randomSpeed = 2 + Math.random() * 8;
-      const upwardBias = -2; // Slight upward movement for magical floating effect
+      const direction = { x: Math.cos(angle), y: Math.sin(angle) };
+      Matter.Body.setVelocity(particle, { x: direction.x * speed, y: direction.y * speed });
       
-      const velocityX = Math.cos(randomAngle) * randomSpeed;
-      const velocityY = Math.sin(randomAngle) * randomSpeed + upwardBias;
-      Matter.Body.setVelocity(particle, { x: velocityX, y: velocityY });
+      this.particleLifecycleData.set(particle, {
+        birthTime: currentTime,
+        initialDirection: direction,
+        maxDistance: maxDistance,
+        type: 'sparkle'
+      });
       
       this.celebrationParticles.push(particle);
     }
   }
 
   private startScreenGlow() {
-    const maxGlowIntensity = 0.3; // Gentle glow, not overwhelming
-    const glowDuration = 2000; // 2 seconds of glow effect
+    const maxGlowIntensity = 0.2; // Reduced from 0.3 to 0.2
+    const glowDuration = 1000; // Reduced from 2000ms to 1000ms
     const startTime = Date.now();
     
     const glowInterval = setInterval(() => {
@@ -1020,160 +1036,229 @@ export default class PlinkoEngine {
    }
 
    private updateCelebrationParticles() {
-     if (!this.isCashOutCelebrating || this.celebrationParticles.length === 0) {
-       return;
-     }
-     
-     const elapsed = Date.now() - this.celebrationStartTime;
-     const progress = elapsed / this.celebrationDuration;
-     const time = Date.now();
-     
-     // Update particle appearance with celebration effects
-     for (let i = 0; i < this.celebrationParticles.length; i++) {
-       const particle = this.celebrationParticles[i];
-       if (!particle.render || !particle.render.fillStyle) continue;
-       
-       const baseColor = particle.render.fillStyle as string;
-       
-       // Calculate alpha with slower fade than explosion
-       let alpha;
-       if (progress < 0.3) {
-         // Stay bright longer than explosion
-         alpha = 1.0;
-       } else if (progress < 0.8) {
-         // Gradual fade
-         alpha = 1.0 - ((progress - 0.3) / 0.5) * 0.5;
-       } else {
-         // Final fade
-         alpha = 0.5 * (1 - ((progress - 0.8) / 0.2));
-       }
-       
-       // Add twinkling effect for sparkles and golden particles
-       const particleRadius = (particle as any).circleRadius || particle.bounds.max.x - particle.bounds.min.x;
-       if (particleRadius <= 5) { // Small sparkles
-         const twinkleSpeed = 0.015 + (i % 5) * 0.003; // Vary twinkle speed per particle
-         const twinkle = Math.sin(time * twinkleSpeed + i) * 0.4 + 0.6; // 0.2 to 1.0
-         alpha *= twinkle;
-       }
-       
-       // Golden particles get a warm glow effect
-       if (baseColor.includes('FFD700') || baseColor.includes('FFA500')) {
-         const glow = Math.sin(time * 0.008 + i) * 0.2 + 0.8; // 0.6 to 1.0
-         alpha *= glow;
-       }
-       
-       // Brighten colors over time instead of dimming (opposite of explosion)
-       let finalColor = baseColor;
-       if (baseColor.startsWith('#')) {
-         const r = parseInt(baseColor.substr(1, 2), 16);
-         const g = parseInt(baseColor.substr(3, 2), 16);
-         const b = parseInt(baseColor.substr(5, 2), 16);
-         
-         // Brighten colors over time for more celebratory effect
-         const brightnessFactor = 1 + (progress * 0.2); // Get brighter over time
-         const brightenedR = Math.min(255, r * brightnessFactor);
-         const brightenedG = Math.min(255, g * brightnessFactor);
-         const brightenedB = Math.min(255, b * brightnessFactor);
-         
-         finalColor = `rgba(${Math.round(brightenedR)}, ${Math.round(brightenedG)}, ${Math.round(brightenedB)}, ${Math.max(0, alpha)})`;
-       } else {
-         // Fallback for colors that don't start with #
-         finalColor = `rgba(255, 215, 0, ${Math.max(0, alpha)})`; // Gold fallback
-       }
-       
-       particle.render.fillStyle = finalColor;
-       
-       // Update stroke with complementary effect
-       if (particle.render.strokeStyle) {
-         const strokeAlpha = Math.min(alpha * 1.2, 1.0); // Stroke stays visible longer
-         particle.render.strokeStyle = `rgba(255, 255, 255, ${Math.max(0, strokeAlpha)})`;
-       }
-     }
-     
-     // Remove celebration particles after duration
-     if (progress >= 1) {
-       Matter.Composite.remove(this.engine.world, this.celebrationParticles);
-       this.celebrationParticles = [];
-     }
-   }
+    if (!this.isCashOutCelebrating || this.celebrationParticles.length === 0 || !this.celebratingBall) {
+      return;
+    }
+    
+    const elapsed = Date.now() - this.celebrationStartTime;
+    const progress = elapsed / this.celebrationDuration;
+    const time = Date.now();
+    const ballPosition = this.celebratingBall.position;
+    
+    // Update each particle's position and appearance based on its lifecycle
+    for (let i = this.celebrationParticles.length - 1; i >= 0; i--) {
+      const particle = this.celebrationParticles[i];
+      const lifecycleData = this.particleLifecycleData.get(particle);
+      
+      if (!particle.render || !lifecycleData) continue;
+      
+      const particleAge = time - lifecycleData.birthTime;
+      const particlePosition = particle.position;
+      
+      // Calculate distance from ball
+      const distanceFromBall = Math.sqrt(
+        Math.pow(particlePosition.x - ballPosition.x, 2) + 
+        Math.pow(particlePosition.y - ballPosition.y, 2)
+      );
+      
+      // Determine lifecycle phase based on time and distance
+      const expandPhaseTime = 300; // 300ms to expand
+      const contractStartTime = 400; // Start contracting at 400ms
+      
+      let newVelocity = { x: 0, y: 0 };
+      let alpha = 1.0;
+      
+      if (particleAge < expandPhaseTime) {
+        // EXPAND PHASE: Particles move outward from ball
+        const expandProgress = particleAge / expandPhaseTime;
+        const targetDistance = lifecycleData.maxDistance * expandProgress;
+        
+        // Continue expanding in initial direction but slow down as we reach target
+        const slowdownFactor = Math.max(0.2, 1 - expandProgress);
+        newVelocity.x = lifecycleData.initialDirection.x * 6 * slowdownFactor;
+        newVelocity.y = lifecycleData.initialDirection.y * 6 * slowdownFactor;
+        
+        alpha = 0.3 + (expandProgress * 0.7); // Fade in during expansion
+        
+      } else if (particleAge >= contractStartTime) {
+        // CONTRACT PHASE: Particles swirl back toward ball
+        const contractAge = particleAge - contractStartTime;
+        const contractDuration = this.celebrationDuration - contractStartTime;
+        const contractProgress = Math.min(1.0, contractAge / contractDuration);
+        
+        // Calculate direction back to ball
+        const toBallX = ballPosition.x - particlePosition.x;
+        const toBallY = ballPosition.y - particlePosition.y;
+        const toBallDistance = Math.sqrt(toBallX * toBallX + toBallY * toBallY);
+        
+        if (toBallDistance > 5) { // Only move if not too close to ball
+          // Normalize direction
+          const toBallDirectionX = toBallX / toBallDistance;
+          const toBallDirectionY = toBallY / toBallDistance;
+          
+          // Add swirling motion for more visual appeal
+          const swirl = Math.sin(time * 0.01 + i) * 0.3;
+          const perpendicularX = -toBallDirectionY; // Perpendicular for swirl
+          const perpendicularY = toBallDirectionX;
+          
+          // Increase speed as we contract more
+          const contractSpeed = 8 + (contractProgress * 12);
+          
+          newVelocity.x = (toBallDirectionX + perpendicularX * swirl) * contractSpeed;
+          newVelocity.y = (toBallDirectionY + perpendicularY * swirl) * contractSpeed;
+          
+          alpha = 1.0 - (contractProgress * 0.5); // Fade out as approaching ball
+        } else {
+          // Very close to ball - remove particle
+          Matter.Composite.remove(this.engine.world, particle);
+          this.celebrationParticles.splice(i, 1);
+          this.particleLifecycleData.delete(particle);
+          continue;
+        }
+        
+      } else {
+        // PAUSE PHASE: Brief moment at max expansion before contracting
+        newVelocity.x = 0;
+        newVelocity.y = 0;
+        alpha = 1.0;
+      }
+      
+      // Apply the calculated velocity
+      Matter.Body.setVelocity(particle, newVelocity);
+      
+      // Update visual appearance based on particle type and lifecycle
+      this.updateParticleAppearance(particle, lifecycleData, alpha, time, i);
+    }
+    
+    // Remove all particles when celebration is complete
+    if (progress >= 1) {
+      Matter.Composite.remove(this.engine.world, this.celebrationParticles);
+      this.celebrationParticles = [];
+      this.particleLifecycleData.clear();
+    }
+  }
 
-   private updateCelebrationBall(progress: number) {
-     if (!this.celebratingBall || !this.celebratingBall.render) return;
-     
-     const time = Date.now();
-     
-     // Make the ball grow and pulse with golden effects
-     const pulseSpeed = 0.01;
-     const pulse = Math.sin(time * pulseSpeed) * 0.5 + 0.5; // 0 to 1
-     
-     // Grow the ball over time
-     const growthFactor = 1 + (progress * 0.8) + (pulse * 0.3); // Grows up to 1.8x + pulse
-     const newRadius = this.ballOriginalRadius * growthFactor;
-     
-     // Update ball scale (this is a visual effect, doesn't change physics)
-     // For Matter.js, we'll use rendering tricks to make it appear larger
-     const goldIntensity = Math.floor(150 + (pulse * 105)); // Gold from 150 to 255
-     const greenIntensity = Math.floor(200 + (pulse * 55)); // Green stays high
-     
-     // Create golden-green gradient effect
-     this.celebratingBall.render.fillStyle = `rgb(${goldIntensity}, ${greenIntensity}, 0)`;
-     this.celebratingBall.render.strokeStyle = '#FFD700';
-     this.celebratingBall.render.lineWidth = 4 + (pulse * 4); // Pulsing border
-     
-     // Add sparkling ring effect around the ball
-     this.addSparkleRingAroundBall();
-   }
+  private updateParticleAppearance(
+    particle: Matter.Body, 
+    lifecycleData: { type: 'golden' | 'green' | 'sparkle' }, 
+    alpha: number, 
+    time: number, 
+    index: number
+  ) {
+    if (!particle.render) return;
+    
+    const baseColor = particle.render.fillStyle as string;
+    
+    // Add type-specific effects
+    let finalAlpha = alpha;
+    
+    if (lifecycleData.type === 'sparkle') {
+      // Sparkles twinkle
+      const twinkle = Math.sin(time * 0.02 + index) * 0.3 + 0.7;
+      finalAlpha *= twinkle;
+    } else if (lifecycleData.type === 'golden') {
+      // Golden particles have a warm glow
+      const glow = Math.sin(time * 0.008 + index) * 0.2 + 0.8;
+      finalAlpha *= glow;
+    }
+    
+    // Update color with calculated alpha
+    let finalColor = baseColor;
+    if (baseColor.startsWith('#')) {
+      const r = parseInt(baseColor.substr(1, 2), 16);
+      const g = parseInt(baseColor.substr(3, 2), 16);
+      const b = parseInt(baseColor.substr(5, 2), 16);
+      finalColor = `rgba(${r}, ${g}, ${b}, ${Math.max(0, finalAlpha)})`;
+    } else {
+      finalColor = `rgba(255, 215, 0, ${Math.max(0, finalAlpha)})`;
+    }
+    
+    particle.render.fillStyle = finalColor;
+    
+    // Update stroke
+    if (particle.render.strokeStyle) {
+      const strokeAlpha = Math.min(finalAlpha * 1.2, 1.0);
+      particle.render.strokeStyle = `rgba(255, 255, 255, ${Math.max(0, strokeAlpha)})`;
+    }
+  }
 
-   private addSparkleRingAroundBall() {
-     if (!this.celebratingBall) return;
-     
-     const time = Date.now();
-     const ballX = this.celebratingBall.position.x;
-     const ballY = this.celebratingBall.position.y;
-     
-     // Create a few extra sparkles around the ball every few frames
-     if (time % 200 < 50) { // Create sparkles every 200ms for 50ms duration
-       for (let i = 0; i < 3; i++) {
-         const angle = (time * 0.005 + i * Math.PI * 2 / 3) % (Math.PI * 2);
-         const radius = this.ballOriginalRadius * 3; // Ring around the ball
-         const sparkleX = ballX + Math.cos(angle) * radius;
-         const sparkleY = ballY + Math.sin(angle) * radius;
-         
-         const sparkle = Matter.Bodies.circle(sparkleX, sparkleY, 2, {
-           frictionAir: 0.1,
-           restitution: 0.5,
-           density: 0.0001,
-           render: {
-             fillStyle: '#FFFF00',
-             strokeStyle: '#FFD700',
-             lineWidth: 1,
-           },
-           collisionFilter: {
-             category: PlinkoEngine.EXPLOSION_CATEGORY,
-             mask: 0, // No collisions
-           },
-         });
-         
-         // Give sparkles a short lifespan and gentle motion
-         const velocity = {
-           x: (Math.random() - 0.5) * 2,
-           y: (Math.random() - 0.5) * 2 - 1 // Slight upward bias
-         };
-         Matter.Body.setVelocity(sparkle, velocity);
-         
-         this.celebrationParticles.push(sparkle);
-         Matter.Composite.add(this.engine.world, sparkle);
-         
-         // Remove sparkle after a short time
-         setTimeout(() => {
-           if (this.celebrationParticles.includes(sparkle)) {
-             Matter.Composite.remove(this.engine.world, sparkle);
-             this.celebrationParticles.splice(this.celebrationParticles.indexOf(sparkle), 1);
-           }
-         }, 1000);
-       }
-     }
-   }
+  private updateCelebrationBall(progress: number) {
+    if (!this.celebratingBall || !this.celebratingBall.render) return;
+    
+    const time = Date.now();
+    
+    // Make the ball grow and pulse with golden effects - toned down
+    const pulseSpeed = 0.01;
+    const pulse = Math.sin(time * pulseSpeed) * 0.5 + 0.5; // 0 to 1
+    
+    // Grow the ball over time - reduced growth factor
+    const growthFactor = 1 + (progress * 0.4) + (pulse * 0.15); // Reduced from 0.8 and 0.3 to 0.4 and 0.15
+    const newRadius = this.ballOriginalRadius * growthFactor;
+    
+    // Update ball scale (this is a visual effect, doesn't change physics)
+    // For Matter.js, we'll use rendering tricks to make it appear larger
+    const goldIntensity = Math.floor(150 + (pulse * 105)); // Gold from 150 to 255
+    const greenIntensity = Math.floor(200 + (pulse * 55)); // Green stays high
+    
+    // Create golden-green gradient effect
+    this.celebratingBall.render.fillStyle = `rgb(${goldIntensity}, ${greenIntensity}, 0)`;
+    this.celebratingBall.render.strokeStyle = '#FFD700';
+    this.celebratingBall.render.lineWidth = 2 + (pulse * 2); // Reduced from 4 + (pulse * 4) to 2 + (pulse * 2)
+    
+    // Add sparkling ring effect around the ball
+    this.addSparkleRingAroundBall();
+  }
+
+  private addSparkleRingAroundBall() {
+    if (!this.celebratingBall) return;
+    
+    const time = Date.now();
+    const ballX = this.celebratingBall.position.x;
+    const ballY = this.celebratingBall.position.y;
+    
+    // Create fewer sparkles around the ball less frequently
+    if (time % 400 < 50) { // Changed from every 200ms to every 400ms
+      for (let i = 0; i < 2; i++) { // Reduced from 3 to 2 sparkles
+        const angle = (time * 0.005 + i * Math.PI * 2 / 2) % (Math.PI * 2); // Updated for 2 sparkles
+        const radius = this.ballOriginalRadius * 3; // Ring around the ball
+        const sparkleX = ballX + Math.cos(angle) * radius;
+        const sparkleY = ballY + Math.sin(angle) * radius;
+        
+        const sparkle = Matter.Bodies.circle(sparkleX, sparkleY, 2, {
+          frictionAir: 0.1,
+          restitution: 0.5,
+          density: 0.0001,
+          render: {
+            fillStyle: '#FFFF00',
+            strokeStyle: '#FFD700',
+            lineWidth: 1,
+          },
+          collisionFilter: {
+            category: PlinkoEngine.EXPLOSION_CATEGORY,
+            mask: 0, // No collisions
+          },
+        });
+        
+        // Give sparkles a short lifespan and gentle motion
+        const velocity = {
+          x: (Math.random() - 0.5) * 2,
+          y: (Math.random() - 0.5) * 2 - 1 // Slight upward bias
+        };
+        Matter.Body.setVelocity(sparkle, velocity);
+        
+        this.celebrationParticles.push(sparkle);
+        Matter.Composite.add(this.engine.world, sparkle);
+        
+        // Remove sparkle after a short time
+        setTimeout(() => {
+          if (this.celebrationParticles.includes(sparkle)) {
+            Matter.Composite.remove(this.engine.world, sparkle);
+            this.celebrationParticles.splice(this.celebrationParticles.indexOf(sparkle), 1);
+          }
+        }, 1000);
+      }
+    }
+  }
   
     private updateExplosionParticles() {
     if (!this.isGameDead || this.explosionParticles.length === 0) {
@@ -1313,6 +1398,9 @@ export default class PlinkoEngine {
       Matter.Composite.remove(this.engine.world, this.celebrationParticles);
       this.celebrationParticles = [];
     }
+
+    // Clean up particle lifecycle data
+    this.particleLifecycleData.clear();
 
     // Reset render background
     if (this.render.options) {
@@ -2038,6 +2126,9 @@ export default class PlinkoEngine {
       Matter.Composite.remove(this.engine.world, this.celebrationParticles);
       this.celebrationParticles = [];
     }
+    
+    // Clean up particle lifecycle data
+    this.particleLifecycleData.clear();
     
     // Complete any ongoing cash out celebration first
     if (this.isCashOutCelebrating || this.isCashOutComplete) {
