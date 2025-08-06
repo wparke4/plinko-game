@@ -162,40 +162,113 @@ export default class AudioManager {
     try {
       const currentTime = this.audioContext.currentTime;
       
-      // Play a triumphant chord progression
-      const chordFrequencies = [
-        finalMultiplier < 5 ? [440, 554, 659] : // C major for low multipliers
-        finalMultiplier < 20 ? [440, 554, 698] : // C major 7 for medium multipliers  
-        [523, 659, 784, 988] // C major with octave for high multipliers
-      ];
+      // Determine tier based on multiplier for dramatically different sounds
+      let tier: 'small' | 'medium' | 'big' | 'massive' | 'legendary';
+      if (finalMultiplier < 2.0) {
+        tier = 'small';
+      } else if (finalMultiplier < 5.0) {
+        tier = 'medium';
+      } else if (finalMultiplier < 15.0) {
+        tier = 'big';
+      } else if (finalMultiplier < 50.0) {
+        tier = 'massive';
+      } else {
+        tier = 'legendary';
+      }
+
+      // Tier-specific configuration
+      const tierConfig = {
+        small: { noteCount: 2, duration: 0.25, baseVolume: 0.12, hasFinale: false },
+        medium: { noteCount: 3, duration: 0.35, baseVolume: 0.16, hasFinale: true },
+        big: { noteCount: 4, duration: 0.45, baseVolume: 0.20, hasFinale: true },
+        massive: { noteCount: 6, duration: 0.6, baseVolume: 0.24, hasFinale: true },
+        legendary: { noteCount: 8, duration: 0.8, baseVolume: 0.28, hasFinale: true }
+      };
+
+      const config = tierConfig[tier];
+      const totalDuration = config.duration;
+      const noteInterval = totalDuration / config.noteCount;
       
-      chordFrequencies.forEach((frequencies, chordIndex) => {
-        frequencies.forEach((freq, noteIndex) => {
-          const oscillator = this.audioContext!.createOscillator();
-          const gainNode = this.audioContext!.createGain();
-          const filter = this.audioContext!.createBiquadFilter();
-          
-          filter.type = 'lowpass';
-          filter.frequency.setValueAtTime(3000 + finalMultiplier * 50, currentTime);
-          
-          oscillator.type = 'sine';
-          oscillator.frequency.setValueAtTime(freq, currentTime);
-          
-          const volume = 0.15 * (1 - noteIndex * 0.1); // Lower volume for higher notes
-          gainNode.gain.setValueAtTime(0, currentTime);
-          gainNode.gain.linearRampToValueAtTime(volume, currentTime + 0.05);
-          gainNode.gain.exponentialRampToValueAtTime(0.001, currentTime + 1.5);
-          
-          oscillator.connect(filter);
-          filter.connect(gainNode);
-          if (this.masterGainNode) {
-            gainNode.connect(this.masterGainNode);
-          }
-          
-          oscillator.start(currentTime);
-          oscillator.stop(currentTime + 1.5);
-        });
-      });
+      // Lower, more powerful frequencies
+      const baseFreq = 880; // A5 - much lower and more powerful than before
+      const frequencies = [880, 1100, 1320, 1760]; // Strong, punchy frequencies
+      
+      // Create powerful staccato notes
+      for (let i = 0; i < config.noteCount; i++) {
+        const noteDelay = i * noteInterval;
+        const noteDuration = 0.1; // Slightly longer for more punch
+        
+        // Create dual-layer sound for power
+        const mainOsc = this.audioContext.createOscillator();
+        const subOsc = this.audioContext.createOscillator(); // Add sub-frequency for punch
+        const mainGain = this.audioContext.createGain();
+        const subGain = this.audioContext.createGain();
+        const filter = this.audioContext.createBiquadFilter();
+        
+        // Band-pass filter for punch and clarity
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(1200, currentTime + noteDelay);
+        filter.Q.setValueAtTime(3, currentTime + noteDelay);
+        
+        // Main oscillator - punchy square wave
+        mainOsc.type = 'square';
+        const mainFreq = frequencies[i % frequencies.length];
+        mainOsc.frequency.setValueAtTime(mainFreq, currentTime + noteDelay);
+        
+        // Sub oscillator - adds low-end punch
+        subOsc.type = 'sawtooth';
+        subOsc.frequency.setValueAtTime(mainFreq / 2, currentTime + noteDelay); // Octave down
+        
+        // Tier-based volume with progressive intensity
+        const baseVolume = config.baseVolume;
+        const volumeBoost = (i / config.noteCount) * 0.06; // Notes get louder as they progress
+        const volume = baseVolume + volumeBoost;
+        const subVolume = volume * (tier === 'legendary' ? 0.6 : 0.4); // More sub for legendary wins
+        
+        // Sharp attack, controlled decay for punch
+        mainGain.gain.setValueAtTime(0, currentTime + noteDelay);
+        mainGain.gain.linearRampToValueAtTime(volume, currentTime + noteDelay + 0.01); // Quick attack
+        mainGain.gain.exponentialRampToValueAtTime(0.001, currentTime + noteDelay + noteDuration);
+        
+        subGain.gain.setValueAtTime(0, currentTime + noteDelay);
+        subGain.gain.linearRampToValueAtTime(subVolume, currentTime + noteDelay + 0.01);
+        subGain.gain.exponentialRampToValueAtTime(0.001, currentTime + noteDelay + noteDuration);
+        
+        // Connect audio graph
+        mainOsc.connect(filter);
+        subOsc.connect(mainGain); // Sub bypasses filter for more punch
+        filter.connect(mainGain);
+        
+        if (this.masterGainNode) {
+          mainGain.connect(this.masterGainNode);
+          subGain.connect(this.masterGainNode);
+        }
+        
+        // Start and stop
+        mainOsc.start(currentTime + noteDelay);
+        subOsc.start(currentTime + noteDelay);
+        mainOsc.stop(currentTime + noteDelay + noteDuration);
+        subOsc.stop(currentTime + noteDelay + noteDuration);
+      }
+      
+      // Add tier-specific finale
+      if (config.hasFinale) {
+        const finalDelay = totalDuration + 0.02;
+        
+        if (tier === 'medium') {
+          // Simple powerful final note for medium wins
+          this.createSimpleFinale(currentTime + finalDelay, 0.18);
+        } else if (tier === 'big') {
+          // Stronger finale with harmony for big wins
+          this.createHarmonyFinale(currentTime + finalDelay, 0.22);
+        } else if (tier === 'massive') {
+          // Epic finale with multiple layers for massive wins
+          this.createEpicFinale(currentTime + finalDelay, 0.26);
+        } else if (tier === 'legendary') {
+          // Absolutely legendary finale with full orchestra-like sound
+          this.createLegendaryFinale(currentTime + finalDelay, 0.30);
+        }
+      }
       
     } catch (error) {
       console.warn('Failed to play cash out sound:', error);
@@ -279,6 +352,190 @@ export default class AudioManager {
     } catch (error) {
       console.warn('Failed to play ball drop sound:', error);
     }
+  }
+
+  // Helper methods for tier-specific finales
+  private createSimpleFinale(startTime: number, volume: number) {
+    if (!this.audioContext || !this.masterGainNode) return;
+    
+    const osc = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+    
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(1320, startTime); // E6
+    
+    gain.gain.setValueAtTime(0, startTime);
+    gain.gain.linearRampToValueAtTime(volume, startTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.3);
+    
+    osc.connect(gain);
+    if (this.masterGainNode) {
+      gain.connect(this.masterGainNode);
+    }
+    
+    osc.start(startTime);
+    osc.stop(startTime + 0.3);
+  }
+
+  private createHarmonyFinale(startTime: number, volume: number) {
+    if (!this.audioContext || !this.masterGainNode) return;
+    
+    // Create a harmony chord (E major)
+    const frequencies = [1320, 1650, 1980]; // E6, G#6, B6
+    
+    frequencies.forEach((freq, index) => {
+      const osc = this.audioContext!.createOscillator();
+      const gain = this.audioContext!.createGain();
+      
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, startTime);
+      
+      const noteVolume = volume * (1 - index * 0.15); // Lower volume for higher notes
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(noteVolume, startTime + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.4);
+      
+      osc.connect(gain);
+      if (this.masterGainNode) {
+        gain.connect(this.masterGainNode);
+      }
+      
+      osc.start(startTime);
+      osc.stop(startTime + 0.4);
+    });
+  }
+
+  private createEpicFinale(startTime: number, volume: number) {
+    if (!this.audioContext || !this.masterGainNode) return;
+    
+    // Create massive chord with multiple layers
+    const mainChord = [1320, 1650, 1980, 2640]; // E6, G#6, B6, E7
+    const subChord = [660, 825, 990]; // E5, G#5, B5 (octave down)
+    
+    // Main chord
+    mainChord.forEach((freq, index) => {
+      const osc = this.audioContext!.createOscillator();
+      const gain = this.audioContext!.createGain();
+      
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, startTime);
+      
+      const noteVolume = volume * (1 - index * 0.1);
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(noteVolume, startTime + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.5);
+      
+      osc.connect(gain);
+      if (this.masterGainNode) {
+        gain.connect(this.masterGainNode);
+      }
+      
+      osc.start(startTime);
+      osc.stop(startTime + 0.5);
+    });
+    
+    // Sub chord for power
+    subChord.forEach((freq, index) => {
+      const osc = this.audioContext!.createOscillator();
+      const gain = this.audioContext!.createGain();
+      
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, startTime);
+      
+      const noteVolume = volume * 0.4 * (1 - index * 0.1);
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(noteVolume, startTime + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.5);
+      
+      osc.connect(gain);
+      if (this.masterGainNode) {
+        gain.connect(this.masterGainNode);
+      }
+      
+      osc.start(startTime);
+      osc.stop(startTime + 0.5);
+    });
+  }
+
+  private createLegendaryFinale(startTime: number, volume: number) {
+    if (!this.audioContext || !this.masterGainNode) return;
+    
+    // Create absolutely massive orchestral-style finale
+    const mainChord = [1320, 1650, 1980, 2640, 3300]; // Extended E major
+    const harmonyChord = [660, 825, 990, 1320]; // Lower harmony
+    const bassLine = [330, 412.5]; // Very low bass
+    
+    // Main bright chord
+    mainChord.forEach((freq, index) => {
+      const osc = this.audioContext!.createOscillator();
+      const gain = this.audioContext!.createGain();
+      const filter = this.audioContext!.createBiquadFilter();
+      
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(4000, startTime);
+      filter.Q.setValueAtTime(2, startTime);
+      
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, startTime);
+      
+      const noteVolume = volume * (1 - index * 0.08);
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(noteVolume, startTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.8);
+      
+      osc.connect(filter);
+      filter.connect(gain);
+      if (this.masterGainNode) {
+        gain.connect(this.masterGainNode);
+      }
+      
+      osc.start(startTime);
+      osc.stop(startTime + 0.8);
+    });
+    
+    // Harmony layer
+    harmonyChord.forEach((freq, index) => {
+      const osc = this.audioContext!.createOscillator();
+      const gain = this.audioContext!.createGain();
+      
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, startTime + 0.1); // Slightly delayed
+      
+      const noteVolume = volume * 0.5 * (1 - index * 0.1);
+      gain.gain.setValueAtTime(0, startTime + 0.1);
+      gain.gain.linearRampToValueAtTime(noteVolume, startTime + 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.8);
+      
+      osc.connect(gain);
+      if (this.masterGainNode) {
+        gain.connect(this.masterGainNode);
+      }
+      
+      osc.start(startTime + 0.1);
+      osc.stop(startTime + 0.8);
+    });
+    
+    // Deep bass for ultimate power
+    bassLine.forEach((freq, index) => {
+      const osc = this.audioContext!.createOscillator();
+      const gain = this.audioContext!.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, startTime);
+      
+      const noteVolume = volume * 0.6 * (1 - index * 0.2);
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(noteVolume, startTime + 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 1.0);
+      
+      osc.connect(gain);
+      if (this.masterGainNode) {
+        gain.connect(this.masterGainNode);
+      }
+      
+      osc.start(startTime);
+      osc.stop(startTime + 1.0);
+    });
   }
 
   public destroy() {
