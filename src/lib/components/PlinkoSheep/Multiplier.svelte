@@ -27,6 +27,7 @@
 
   .multiplier.game-dead {
     color: #ff4444; /* Bright red when player dies */
+    text-shadow: 0 0 8px rgba(255, 68, 68, 0.5);
   }
   
   .multiplier.flashing {
