@@ -1,13 +1,14 @@
 <!-- Multiplier.svelte -->
 <script lang="ts">
-  import { isMultiplierFlashing } from '$lib/stores/game';
+  import { isMultiplierFlashing, gameState } from '$lib/stores/game';
   
   export let multiplier: number = 0;
   
   $: isGameStarted = multiplier > 0;
+  $: isGameDead = $gameState.isGameDead;
 </script>
 
-<div class="multiplier" class:flashing={$isMultiplierFlashing} class:game-started={isGameStarted}>
+<div class="multiplier" class:flashing={$isMultiplierFlashing} class:game-started={isGameStarted} class:game-dead={isGameDead}>
   {multiplier.toFixed(2)}x
 </div>
 
@@ -22,6 +23,10 @@
 
   .multiplier.game-started {
     color: rgba(255, 255, 255, 1); /* Pure white when game starts */
+  }
+
+  .multiplier.game-dead {
+    color: #ff4444; /* Bright red when player dies */
   }
   
   .multiplier.flashing {
