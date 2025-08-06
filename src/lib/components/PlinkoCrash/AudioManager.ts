@@ -164,13 +164,13 @@ export default class AudioManager {
       
       // Determine tier based on multiplier for dramatically different sounds
       let tier: 'small' | 'medium' | 'big' | 'massive' | 'legendary';
-      if (finalMultiplier < 2.0) {
+      if (finalMultiplier < 1.0) {
         tier = 'small';
-      } else if (finalMultiplier < 5.0) {
+      } else if (finalMultiplier < 2.0) {
         tier = 'medium';
-      } else if (finalMultiplier < 15.0) {
+      } else if (finalMultiplier < 4.0) {
         tier = 'big';
-      } else if (finalMultiplier < 50.0) {
+      } else if (finalMultiplier < 8.0) {
         tier = 'massive';
       } else {
         tier = 'legendary';
