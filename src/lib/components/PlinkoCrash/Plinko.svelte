@@ -58,6 +58,13 @@
 
 <div class="relative bg-black">
   <div class="mx-auto flex h-full flex-col px-4" style:max-width={`${WIDTH}px`}>
+    <!-- Move multiplier above the game area -->
+    <div class="mb-4 flex justify-center">
+      <div class="multiplier-container">
+        <Multiplier multiplier={$currentMultiplier} />
+      </div>
+    </div>
+    
     <div class="relative w-full" style:aspect-ratio={`${WIDTH} / ${HEIGHT}`}>
       {#if $plinkoEngine === null}
         <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
@@ -69,9 +76,6 @@
       </canvas>
     </div>
     <div class="mt-4 flex flex-col items-center gap-4 pb-4">
-      <div class="multiplier-container">
-        <Multiplier multiplier={$currentMultiplier} />
-      </div>
       <div class="flex gap-4">
         {#if isBeforeGame}
           <!-- State 1: Before game - only show Drop Ball button -->
