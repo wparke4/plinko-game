@@ -92,7 +92,7 @@
           <!-- State 2: Game in progress - show Cash Out button -->
           <button
             onclick={handleCashOutClick}
-            class="touch-manipulation rounded-md bg-blue-500 py-2 px-6 font-semibold text-white transition-colors hover:bg-blue-400 active:bg-blue-600 flex flex-col"
+            class="touch-manipulation rounded-md bg-red-500 py-2 px-6 font-semibold text-white transition-colors hover:bg-red-400 active:bg-red-600 flex flex-col"
           >
             <span>Cash Out</span>
             <span class="text-sm font-normal">(spacebar)</span>
