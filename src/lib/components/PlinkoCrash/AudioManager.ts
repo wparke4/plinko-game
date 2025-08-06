@@ -202,7 +202,7 @@ export default class AudioManager {
     }
   }
 
-  // Play death/explosion sound
+  // Play subtle death/turn end sound
   public playDeathSound() {
     if (!this.isInitialized || !this.audioContext || !this.masterGainNode || this.isMuted) {
       return;
@@ -211,54 +211,37 @@ export default class AudioManager {
     try {
       const currentTime = this.audioContext.currentTime;
       
-      // Create dramatic explosion sound with noise and low frequencies
-      const noiseBuffer = this.audioContext.createBuffer(1, this.audioContext.sampleRate * 0.5, this.audioContext.sampleRate);
-      const noiseData = noiseBuffer.getChannelData(0);
+      // Create a gentle descending tone to indicate turn end
+      const oscillator = this.audioContext.createOscillator();
+      const gainNode = this.audioContext.createGain();
+      const filter = this.audioContext.createBiquadFilter();
       
-      // Generate white noise
-      for (let i = 0; i < noiseData.length; i++) {
-        noiseData[i] = (Math.random() * 2 - 1) * 0.5;
-      }
+      // Configure filter for a soft, muffled sound
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(800, currentTime);
+      filter.frequency.exponentialRampToValueAtTime(200, currentTime + 0.8);
+      filter.Q.setValueAtTime(1, currentTime);
       
-      const noiseSource = this.audioContext.createBufferSource();
-      noiseSource.buffer = noiseBuffer;
+      // Create a gentle descending tone
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(330, currentTime); // Start at E4
+      oscillator.frequency.exponentialRampToValueAtTime(165, currentTime + 0.8); // Descend to E3 (one octave down)
       
-      const noiseGain = this.audioContext.createGain();
-      const noiseFilter = this.audioContext.createBiquadFilter();
+      // Very gentle envelope - soft and unobtrusive
+      gainNode.gain.setValueAtTime(0, currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.08, currentTime + 0.1); // Very quiet
+      gainNode.gain.exponentialRampToValueAtTime(0.001, currentTime + 0.8); // Long, gentle fade
       
-      noiseFilter.type = 'lowpass';
-      noiseFilter.frequency.setValueAtTime(200, currentTime);
-      noiseFilter.frequency.exponentialRampToValueAtTime(50, currentTime + 0.5);
-      
-      noiseGain.gain.setValueAtTime(0.3, currentTime);
-      noiseGain.gain.exponentialRampToValueAtTime(0.001, currentTime + 0.5);
-      
-      noiseSource.connect(noiseFilter);
-      noiseFilter.connect(noiseGain);
+      // Connect audio graph
+      oscillator.connect(filter);
+      filter.connect(gainNode);
       if (this.masterGainNode) {
-        noiseGain.connect(this.masterGainNode);
+        gainNode.connect(this.masterGainNode);
       }
       
-      noiseSource.start(currentTime);
-      
-      // Add a deep thud
-      const thudOsc = this.audioContext.createOscillator();
-      const thudGain = this.audioContext.createGain();
-      
-      thudOsc.type = 'sine';
-      thudOsc.frequency.setValueAtTime(60, currentTime);
-      thudOsc.frequency.exponentialRampToValueAtTime(30, currentTime + 0.3);
-      
-      thudGain.gain.setValueAtTime(0.4, currentTime);
-      thudGain.gain.exponentialRampToValueAtTime(0.001, currentTime + 0.3);
-      
-      thudOsc.connect(thudGain);
-      if (this.masterGainNode) {
-        thudGain.connect(this.masterGainNode);
-      }
-      
-      thudOsc.start(currentTime);
-      thudOsc.stop(currentTime + 0.3);
+      // Play the sound
+      oscillator.start(currentTime);
+      oscillator.stop(currentTime + 0.8);
       
     } catch (error) {
       console.warn('Failed to play death sound:', error);
