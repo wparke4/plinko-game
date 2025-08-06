@@ -111,6 +111,10 @@ export default class PlinkoEngine {
   private readonly PREVIEW_OPACITY_UPDATE_INTERVAL = 100; // Update opacity every 100ms
   private isPreviewPassagesActive: boolean = false;
 
+  // Progressive spacing configuration
+  static readonly SPACING_INCREASE_PER_ROW = 0.05; // 3% increase per row
+  static readonly MAX_SPACING_MULTIPLIER = 1.5; // Maximum 100% increase (2x original)
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     
@@ -190,6 +194,42 @@ export default class PlinkoEngine {
     return PlinkoEngine.REFERENCE_PIN_SPACING;
   }
 
+  // Calculate the spacing for a specific row index (0-based)
+  private getRowSpacing(rowIndex: number): number {
+    const spacingMultiplier = 1 + Math.min(rowIndex * PlinkoEngine.SPACING_INCREASE_PER_ROW, PlinkoEngine.MAX_SPACING_MULTIPLIER - 1);
+    return PlinkoEngine.ROW_HEIGHT * spacingMultiplier;
+  }
+
+  // Calculate the cumulative Y position for a specific row index (0-based)
+  private getRowYPosition(rowIndex: number): number {
+    let cumulativeY = PlinkoEngine.PADDING_TOP;
+    
+    for (let i = 0; i < rowIndex; i++) {
+      cumulativeY += this.getRowSpacing(i);
+    }
+    
+    return cumulativeY;
+  }
+
+  // Find the row index for a given Y position (reverse lookup)
+  private getRowIndexFromY(y: number): number {
+    if (y < PlinkoEngine.PADDING_TOP) return 0;
+    
+    let cumulativeY = PlinkoEngine.PADDING_TOP;
+    let rowIndex = 0;
+    
+    while (cumulativeY <= y) {
+      const spacing = this.getRowSpacing(rowIndex);
+      if (cumulativeY + spacing > y) {
+        break;
+      }
+      cumulativeY += spacing;
+      rowIndex++;
+    }
+    
+    return rowIndex;
+  }
+
   // Public method to update risk level and regenerate pins if needed
   public setRiskLevel(newRiskLevel: RiskLevel) {
     if (newRiskLevel !== this.currentRiskLevel) {
@@ -258,9 +298,9 @@ export default class PlinkoEngine {
     // Clear existing pins and walls if any
     this.clearExistingPins();
 
-    // Start generating rows right from the top
-    this.firstVisibleRowY = PlinkoEngine.PADDING_TOP;
-    this.lastGeneratedRowY = PlinkoEngine.PADDING_TOP;
+    // Start generating rows right from the top - using row 0 position
+    this.firstVisibleRowY = this.getRowYPosition(0);
+    this.lastGeneratedRowY = this.getRowYPosition(0);
 
     // Generate initial set of rows to fill the viewport
     this.manageDynamicRows();
@@ -333,8 +373,8 @@ export default class PlinkoEngine {
     this.rowPinPositions.set(rowY, rowPins);
     Matter.Composite.add(this.engine.world, rowPins);
     
-    // Calculate row index for passage placement
-    const rowIndex = Math.floor((rowY - this.firstVisibleRowY) / PlinkoEngine.ROW_HEIGHT);
+    // Calculate row index for passage placement using progressive spacing
+    const rowIndex = this.getRowIndexFromY(rowY);
     
     // If game is in progress, create actual passages instead of preview passages
     if (this.isGameInProgress()) {
@@ -565,7 +605,7 @@ export default class PlinkoEngine {
     if (!rowPassages) return;
     
     const time = Date.now();
-    const rowIndex = Math.floor((rowY - this.firstVisibleRowY) / PlinkoEngine.ROW_HEIGHT);
+    const rowIndex = this.getRowIndexFromY(rowY);
     
     // Create row-specific behavior by using row index as seed
     const rowSeed = rowIndex * 1337; // Different seed per row
@@ -1484,7 +1524,10 @@ export default class PlinkoEngine {
 
     // Update multiplier based on rows passed
     if (this.startingRowY !== null) {
-      const rowsPassed = Math.floor((ballY - this.startingRowY) / PlinkoEngine.ROW_HEIGHT);
+      // Calculate rows passed using the new progressive spacing system
+      const currentRowIndex = this.getRowIndexFromY(ballY);
+      const startingRowIndex = this.getRowIndexFromY(this.startingRowY);
+      const rowsPassed = Math.max(0, currentRowIndex - startingRowIndex);
       
       // Progressive multiplier with slower acceleration: 0.00x -> 0.05x -> 0.10x -> 0.16x -> 0.22x -> 0.29x...
       // Increment increases by 0.01x every 2 rows: +0.05x, +0.05x, +0.06x, +0.06x, +0.07x, +0.07x...
@@ -1509,6 +1552,8 @@ export default class PlinkoEngine {
         console.log('Multiplier Update:', {
           ballY,
           startingRowY: this.startingRowY,
+          currentRowIndex,
+          startingRowIndex,
           rowsPassed,
           newMultiplier: this.currentMultiplier
         });
@@ -1549,7 +1594,7 @@ export default class PlinkoEngine {
   }
 
   private manageDynamicRows() {
-    const { ROW_HEIGHT, HEIGHT, VIEWPORT_BUFFER } = PlinkoEngine;
+    const { HEIGHT, VIEWPORT_BUFFER } = PlinkoEngine;
     
     // Calculate viewport boundaries with buffer
     const viewportTop = this.cameraY - (HEIGHT * VIEWPORT_BUFFER);
@@ -1557,19 +1602,28 @@ export default class PlinkoEngine {
 
     // Generate new rows if needed
     if (this.cameraY > this.lastGeneratedRowY - HEIGHT) {
-      let nextRowY = this.lastGeneratedRowY + ROW_HEIGHT;
+      // Calculate the current highest row index
+      let currentRowIndex = this.getRowIndexFromY(this.lastGeneratedRowY);
+      
+      // Generate rows until we cover the viewport
+      let nextRowY = this.getRowYPosition(currentRowIndex + 1);
       
       while (nextRowY <= viewportBottom) {
         if (!this.rowPinPositions.has(nextRowY)) {
-          const rowIndex = Math.floor((nextRowY - this.firstVisibleRowY) / ROW_HEIGHT);
+          const rowIndex = this.getRowIndexFromY(nextRowY);
           const isOffset = rowIndex % 2 === 1;
           
           // Use the current pin count for this risk level
           this.createRowOfPins(nextRowY, this.currentPinsPerRow, isOffset);
         }
-        nextRowY += ROW_HEIGHT;
+        
+        // Move to next row
+        currentRowIndex++;
+        nextRowY = this.getRowYPosition(currentRowIndex + 1);
       }
-      this.lastGeneratedRowY = Math.max(this.lastGeneratedRowY, nextRowY - ROW_HEIGHT);
+      
+      // Update lastGeneratedRowY to the last row we actually generated
+      this.lastGeneratedRowY = this.getRowYPosition(currentRowIndex);
     }
     
     // Clean up rows that are out of view
@@ -1692,7 +1746,7 @@ export default class PlinkoEngine {
     // Reset multiplier and set starting row
     this.currentMultiplier = 0.0;
     currentMultiplier.set(this.currentMultiplier); // Update the store
-    this.startingRowY = PlinkoEngine.PADDING_TOP; // Set to first row of pins instead of ready ball position
+    this.startingRowY = this.getRowYPosition(0); // Set to first row of pins instead of ready ball position
     console.log('Starting row Y set to:', this.startingRowY);
 
     // Deduct bet amount from balance
@@ -1773,8 +1827,8 @@ export default class PlinkoEngine {
     
     // For each row, remove preview passages and create actual passages
     for (const rowY of allRowsWithPreviews) {
-      // Calculate row index to determine passage type
-      const rowIndex = Math.floor((rowY - this.firstVisibleRowY) / PlinkoEngine.ROW_HEIGHT);
+      // Calculate row index to determine passage type using progressive spacing
+      const rowIndex = this.getRowIndexFromY(rowY);
       const isOffset = rowIndex % 2 === 1;
       const isDeathRow = (rowIndex + 1) % 2 === 0;
       
