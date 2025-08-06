@@ -117,7 +117,7 @@ export default class PlinkoEngine {
         width: PlinkoEngine.WIDTH,
         height: PlinkoEngine.HEIGHT,
         wireframes: false,
-        background: 'transparent',
+        background: '#000000',
         // Enable bounds debugging to see the viewport
         hasBounds: true,
       },
@@ -1123,7 +1123,7 @@ export default class PlinkoEngine {
 
     // Reset render background to clear any green flash effects
     if (this.render.options) {
-      this.render.options.background = 'transparent';
+      this.render.options.background = '#000000';
     }
 
     // CREATE THE EXPLOSION! 🎆💥
@@ -1251,7 +1251,7 @@ export default class PlinkoEngine {
     
     // Reset render background to clear any green flash effects
     if (this.render.options) {
-      this.render.options.background = 'transparent';
+      this.render.options.background = '#000000';
     }
     
     // Reset revelation tracking
@@ -1394,7 +1394,7 @@ export default class PlinkoEngine {
 
     // Reset render background
     if (this.render.options) {
-      this.render.options.background = 'transparent';
+      this.render.options.background = '#000000';
     }
     
     // Set flag that cash out is complete and waiting for player to start new game

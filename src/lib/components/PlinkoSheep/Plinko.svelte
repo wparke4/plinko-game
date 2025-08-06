@@ -60,7 +60,7 @@
   }
 </script>
 
-<div class="relative bg-gray-900">
+<div class="relative bg-black">
   <div class="mx-auto flex h-full flex-col px-4" style:max-width={`${WIDTH}px`}>
     <div class="relative w-full" style:aspect-ratio={`${WIDTH} / ${HEIGHT}`}>
       {#if $plinkoEngine === null}

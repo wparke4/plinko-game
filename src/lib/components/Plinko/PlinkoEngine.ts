@@ -137,7 +137,7 @@ class PlinkoEngine {
       options: {
         width: PlinkoEngine.WIDTH,
         height: PlinkoEngine.HEIGHT,
-        background: '#0f1728',
+        background: '#000000',
         wireframes: false,
       },
     });

@@ -3,8 +3,6 @@
   import PlinkoSheep from '$lib/components/PlinkoSheep';
   import SettingsWindow from '$lib/components/SettingsWindow';
 
-  import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
   import { plinkoEngine, riskLevel, gameState } from '$lib/stores/game';
   import { RiskLevel } from '$lib/types';
 
@@ -15,12 +13,6 @@
     }
   });
 
-  const gameTypes = [
-    { value: '/', label: 'Classic Plinko' },
-    { value: '/crash', label: 'Crash' },
-    { value: '/sheep', label: 'Sheep' }
-  ];
-
   const riskLevels = [
     { value: RiskLevel.LOW, label: 'Mild 🫑', description: 'Lower risk, safer gameplay' },
     { value: RiskLevel.MEDIUM, label: 'Medium 🌶️', description: 'Balanced risk and reward' },
@@ -29,10 +21,6 @@
 
   // Use reactive gameState store instead of directly calling engine method
   let isGameInProgress = $derived($gameState.isGameInProgress);
-
-  function handleGameChange(path: string) {
-    goto(path);
-  }
 
   function handleRiskChange(newRisk: RiskLevel) {
     // Prevent risk changes during gameplay
@@ -45,7 +33,7 @@
 
 
 
-<div class="relative flex min-h-dvh w-full flex-col bg-gray-900">
+<div class="relative flex min-h-dvh w-full flex-col bg-black">
   <!-- Top Navigation Bar -->
   <div class="absolute top-2 left-4 right-4 z-10 flex items-center justify-between">
     <!-- Risk Level Selector -->
@@ -65,22 +53,12 @@
       </div>
     </div>
 
-    <!-- Game Mode Selector -->
-    <div class="flex gap-1 rounded-full bg-slate-900 p-0.5">
-      {#each gameTypes as { value, label }}
-        <button
-          onclick={() => handleGameChange(value)}
-          class="flex-1 rounded-full py-0.5 px-3 text-xs font-medium text-white transition hover:bg-slate-600 active:bg-slate-500 {$page.url.pathname === value ? 'bg-slate-600' : ''}"
-        >
-          {label}
-        </button>
-      {/each}
-    </div>
+
   </div>
 
   <div class="flex-1 px-5">
     <div class="mx-auto mt-3 max-w-xl min-w-[300px] drop-shadow-xl md:mt-6 lg:max-w-7xl">
-      <div class="flex flex-col-reverse overflow-hidden rounded-lg lg:w-full lg:flex-row bg-gray-900">
+      <div class="flex flex-col-reverse overflow-hidden rounded-lg lg:w-full lg:flex-row bg-black">
         <div class="flex-1">
           <PlinkoSheep />
         </div>
@@ -96,6 +74,6 @@
   @reference "../../app.css";
 
   :global(body) {
-    @apply bg-gray-900;
+    @apply bg-black;
   }
 </style> 

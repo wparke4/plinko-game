@@ -4,41 +4,16 @@
   import Plinko from '$lib/components/Plinko';
   import SettingsWindow from '$lib/components/SettingsWindow';
 
-  import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
 
-
-
-  const gameTypes = [
-    { value: '/', label: 'Classic Plinko' },
-    { value: '/crash', label: 'Sheep' },
-    { value: '/sheep', label: 'Crash' }
-  ];
-
-  function handleGameChange(path: string) {
-    goto(path);
-  }
 </script>
 
 
 
-<div class="relative flex min-h-dvh w-full flex-col bg-gray-900">
-  <div class="absolute top-2 right-4 z-10">
-    <div class="flex gap-1 rounded-full bg-slate-900 p-0.5">
-      {#each gameTypes as { value, label }}
-        <button
-          onclick={() => handleGameChange(value)}
-          class="flex-1 rounded-full py-0.5 px-3 text-xs font-medium text-white transition hover:bg-slate-600 active:bg-slate-500 {$page.url.pathname === value ? 'bg-slate-600' : ''}"
-        >
-          {label}
-        </button>
-      {/each}
-    </div>
-  </div>
+<div class="relative flex min-h-dvh w-full flex-col bg-black">
 
   <div class="flex-1 px-5">
     <div class="mx-auto mt-3 max-w-xl min-w-[300px] drop-shadow-xl md:mt-6 lg:max-w-7xl">
-      <div class="flex flex-col-reverse overflow-hidden rounded-lg lg:w-full lg:flex-row bg-gray-900">
+      <div class="flex flex-col-reverse overflow-hidden rounded-lg lg:w-full lg:flex-row bg-black">
         <div class="flex-1">
           <Plinko />
         </div>
@@ -54,6 +29,6 @@
   @reference "../app.css";
 
   :global(body) {
-    @apply bg-gray-900;
+    @apply bg-black;
   }
 </style>
