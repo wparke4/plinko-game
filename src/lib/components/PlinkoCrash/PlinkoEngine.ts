@@ -454,8 +454,8 @@ export default class PlinkoEngine {
         isStatic: true,
         isSensor: true, // Make it a sensor so balls pass through but we can detect collision
         render: {
-          fillStyle: '#00ff44', // Bright neon green
-          strokeStyle: '#66ff66',
+          fillStyle: '#A3E635', // Bright neon green
+          strokeStyle: '#A3E635',
           lineWidth: 3,
         },
         collisionFilter: {
@@ -504,8 +504,8 @@ export default class PlinkoEngine {
           isStatic: true,
           isSensor: true,
           render: {
-            fillStyle: isDeathRow ? 'rgba(255, 0, 68, 0.5)' : 'rgba(0, 255, 68, 0.5)', // Semi-transparent red or green
-            strokeStyle: isDeathRow ? 'rgba(255, 102, 102, 0.8)' : 'rgba(102, 255, 102, 0.8)',
+            fillStyle: isDeathRow ? 'rgba(255, 0, 68, 0.5)' : 'rgba(163, 230, 53, 0.5)', // Semi-transparent red or green
+            strokeStyle: isDeathRow ? 'rgba(255, 102, 102, 0.8)' : 'rgba(163, 230, 53, 0.8)',
             lineWidth: 2,
           },
           collisionFilter: {
@@ -610,8 +610,8 @@ export default class PlinkoEngine {
         passage.render.fillStyle = `rgba(255, 0, 68, ${finalOpacity})`;
         passage.render.strokeStyle = `rgba(255, 102, 102, ${Math.min(finalOpacity + 0.2, 1)})`;
       } else {
-        passage.render.fillStyle = `rgba(0, 255, 68, ${finalOpacity})`;
-        passage.render.strokeStyle = `rgba(102, 255, 102, ${Math.min(finalOpacity + 0.2, 1)})`;
+        passage.render.fillStyle = `rgba(163, 230, 53, ${finalOpacity})`;
+        passage.render.strokeStyle = `rgba(163, 230, 53, ${Math.min(finalOpacity + 0.2, 1)})`;
       }
     }
   }
@@ -774,8 +774,8 @@ export default class PlinkoEngine {
     const greenIntensity = 100 + (pulse * 155); // Green from 100 to 255
     
     // Make ball flash bright green
-    this.celebratingBall.render.fillStyle = `rgb(0, ${Math.floor(greenIntensity)}, 0)`;
-    this.celebratingBall.render.strokeStyle = '#00ff00';
+    this.celebratingBall.render.fillStyle = '#A3E635';
+    this.celebratingBall.render.strokeStyle = '#A3E635';
     this.celebratingBall.render.lineWidth = 3 + (pulse * 2);
     
     // Add screen-wide green pulse effect
@@ -785,7 +785,7 @@ export default class PlinkoEngine {
   private updateScreenGreenPulse(progress: number, pulse: number) {
     // Create screen-wide green overlay effect by manipulating render background
     const greenAlpha = (pulse * 0.15) * (1 - progress); // Fade out over time
-    const greenOverlay = `rgba(0, 255, 0, ${greenAlpha})`;
+    const greenOverlay = `rgba(163, 230, 53, ${greenAlpha})`;
     
     // Apply green tint to the render background temporarily
     if (this.render.options) {
