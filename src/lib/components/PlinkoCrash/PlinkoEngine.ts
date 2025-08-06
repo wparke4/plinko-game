@@ -85,7 +85,7 @@ export default class PlinkoEngine {
   // Cash out celebration properties
   private isCashOutCelebrating: boolean = false;
   private celebrationStartTime: number = 0;
-  private celebrationDuration: number = 3000; // 3 seconds (extended for more celebration)
+  private celebrationDuration: number = 1500; // 3 seconds (extended for more celebration)
   private celebratingBall: Matter.Body | null = null;
   private isCashOutComplete: boolean = false;
   
