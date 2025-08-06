@@ -21,7 +21,7 @@
     class="fixed right-8 bottom-8 w-[20rem]"
   >
     {#snippet title()}
-      <ChartLine weight="bold" class="text-xl text-slate-300" />
+      <ChartLine weight="bold" class="text-xl text-gray-300" />
       <p class="text-sm font-medium text-white">Live Stats</p>
     {/snippet}
 
@@ -30,7 +30,7 @@
         <Tooltip.Root>
           <Tooltip.Trigger
             onclick={resetLiveStats}
-            class="bg-slate-800 px-5 py-3 text-slate-300 transition hover:bg-slate-700 active:bg-slate-600"
+            class="bg-black px-5 py-3 text-gray-300 transition hover:bg-gray-900 active:bg-gray-800"
           >
             <ArrowClockwise weight="bold" />
           </Tooltip.Trigger>

@@ -37,14 +37,14 @@
 <div
   in:scale={{ duration: 200 }}
   use:draggable={{ bounds: 'body', handle: dragHandleElement }}
-  class={twMerge('z-40 w-[15rem] rounded-md bg-slate-600 drop-shadow-lg', className)}
+  class={twMerge('z-40 w-[15rem] rounded-md bg-gray-900 drop-shadow-lg', className)}
   {...props}
 >
   <!-- Title bar -->
   <div class="flex">
     <div
       bind:this={dragHandleElement}
-      class="flex flex-1 cursor-move items-center gap-2 bg-slate-800 px-4 py-2"
+      class="flex flex-1 cursor-move items-center gap-2 bg-black px-4 py-2"
     >
       {@render title?.()}
     </div>
@@ -52,7 +52,7 @@
       {@render titleBarActions?.()}
       <button
         onclick={onClose}
-        class="bg-slate-800 px-5 py-3 text-slate-300 transition hover:bg-red-600 hover:text-white active:bg-red-700 active:text-white"
+        class="bg-black px-5 py-3 text-gray-300 transition hover:bg-red-600 hover:text-white active:bg-red-700 active:text-white"
       >
         <Close weight="bold" />
       </button>

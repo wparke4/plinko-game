@@ -13,12 +13,12 @@
 <div class="relative">
   <select
     bind:value
-    class="block w-full appearance-none rounded-md border-2 border-slate-600 bg-slate-900 py-2 pr-8 pl-3 text-sm text-white transition hover:cursor-pointer hover:not-disabled:border-slate-500 focus:border-slate-500 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
+    class="block w-full appearance-none rounded-md border-2 border-gray-800 bg-black py-2 pr-8 pl-3 text-sm text-white transition hover:cursor-pointer hover:not-disabled:border-gray-700 focus:border-gray-700 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
     {...props}
   >
     {#each items as { value, label }}
       <option {value}>{label}</option>
     {/each}
   </select>
-  <CaretDown class="absolute top-3 right-3 text-slate-500" weight="bold" />
+  <CaretDown class="absolute top-3 right-3 text-gray-500" weight="bold" />
 </div>

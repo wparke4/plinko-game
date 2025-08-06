@@ -21,7 +21,7 @@
     class="fixed bottom-8 left-8 w-[18rem]"
   >
     {#snippet title()}
-      <GearSix weight="fill" class="text-xl text-slate-300" />
+      <GearSix weight="fill" class="text-xl text-gray-300" />
       <p class="text-sm font-medium text-white">Game Settings</p>
     {/snippet}
 

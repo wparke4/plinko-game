@@ -219,7 +219,7 @@ class PlinkoEngine {
           mask: PlinkoEngine.PIN_CATEGORY, // Collide with pins only, but not other balls
         },
         render: {
-          fillStyle: '#ff0000',
+          fillStyle: '#A3E635',
         },
       },
     );

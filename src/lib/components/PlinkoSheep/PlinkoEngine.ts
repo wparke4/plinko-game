@@ -757,7 +757,7 @@ export default class PlinkoEngine {
       {
         isStatic: true, // Make it static so it doesn't fall
         render: {
-          fillStyle: '#ff0000',
+          fillStyle: '#A3E635',
         },
         collisionFilter: {
           category: PlinkoEngine.BALL_CATEGORY,
@@ -844,7 +844,7 @@ export default class PlinkoEngine {
           mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY | PlinkoEngine.DEATH_PASSAGE_CATEGORY,
         },
         render: {
-          fillStyle: '#ff0000',
+          fillStyle: '#A3E635',
         },
       }
     );
