@@ -323,8 +323,18 @@ export default class PlinkoEngine {
     // Calculate row index for passage placement
     const rowIndex = Math.floor((rowY - this.firstVisibleRowY) / PlinkoEngine.ROW_HEIGHT);
     
-    // Create preview passages for this row (shows all possible positions with animated opacity)
-    this.createPreviewPassages(rowY, isOffset, rowIndex);
+    // If game is in progress, create actual passages instead of preview passages
+    if (this.isGameInProgress()) {
+      const isDeathRow = (rowIndex + 1) % 2 === 0;
+      if (isDeathRow) {
+        this.createDeathPassage(rowY, isOffset);
+      } else {
+        this.createCashOutPassage(rowY, isOffset);
+      }
+    } else {
+      // Create preview passages for this row (shows all possible positions with animated opacity)
+      this.createPreviewPassages(rowY, isOffset, rowIndex);
+    }
   }
 
   private createDeathPassage(rowY: number, isOffset: boolean) {
@@ -471,7 +481,7 @@ export default class PlinkoEngine {
     const numPassages = isOffset ? this.currentPinsPerRow - 2 : this.currentPinsPerRow - 1;
     
     // Determine if this is a death row or cash out row
-    const isDeathRow = (rowIndex + 1) % 2 === 1;
+    const isDeathRow = (rowIndex + 1) % 2 === 0;
     const rowPreviewPassages: Matter.Body[] = [];
     
     // Create preview passages for all possible positions in this row
@@ -1164,7 +1174,7 @@ export default class PlinkoEngine {
       // Calculate row index to determine passage type
       const rowIndex = Math.floor((rowY - this.firstVisibleRowY) / PlinkoEngine.ROW_HEIGHT);
       const isOffset = rowIndex % 2 === 1;
-      const isDeathRow = (rowIndex + 1) % 2 === 1;
+      const isDeathRow = (rowIndex + 1) % 2 === 0;
       
       // Remove preview passages for this row
       const previewPassages = this.rowPreviewPassages.get(rowY);
