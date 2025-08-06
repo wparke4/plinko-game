@@ -85,9 +85,14 @@ export default class PlinkoEngine {
   // Cash out celebration properties
   private isCashOutCelebrating: boolean = false;
   private celebrationStartTime: number = 0;
-  private celebrationDuration: number = 2000; // 2 seconds
+  private celebrationDuration: number = 3000; // 3 seconds (extended for more celebration)
   private celebratingBall: Matter.Body | null = null;
   private isCashOutComplete: boolean = false;
+  
+  // Cash out celebration particles
+  private celebrationParticles: Matter.Body[] = [];
+  private celebrationPulseStartTime: number = 0;
+  private ballOriginalRadius: number = 0;
 
 
 
@@ -817,7 +822,360 @@ export default class PlinkoEngine {
     }, 16); // ~60fps
   }
 
-  private updateExplosionParticles() {
+  private createCashOutCelebration(x: number, y: number) {
+    console.log('Creating cash out celebration at:', { x, y });
+    
+    this.isCashOutCelebrating = true;
+    this.celebrationStartTime = Date.now();
+    this.celebrationPulseStartTime = Date.now();
+    
+    // Store original ball radius for transformation effects
+    if (this.celebratingBall) {
+      this.ballOriginalRadius = PlinkoEngine.BALL_RADIUS;
+    }
+    
+    // Clear any existing celebration particles
+    if (this.celebrationParticles.length > 0) {
+      Matter.Composite.remove(this.engine.world, this.celebrationParticles);
+      this.celebrationParticles = [];
+    }
+    
+    // Create multiple waves of celebratory particles
+    this.createGoldenShower(x, y); // Golden particles raining down
+    this.createCashOutBurst(x, y); // Immediate burst from ball
+    this.createSparkleRain(x, y); // Continuous sparkles
+    
+    // Add all particles to the world
+    Matter.Composite.add(this.engine.world, this.celebrationParticles);
+    
+    // Start screen glow effect
+    this.startScreenGlow();
+  }
+
+  private createGoldenShower(x: number, y: number) {
+    // Golden particle shower falling from above the screen
+    const showerCount = 80;
+    const goldenColors = ['#FFD700', '#FFA500', '#FFFF00', '#FFE135', '#FFB347', '#F0E68C']; // Rich golds and yellows
+    
+    for (let i = 0; i < showerCount; i++) {
+      // Spread particles across the top of the screen
+      const startX = (PlinkoEngine.WIDTH * Math.random());
+      const startY = this.cameraY - 50 - (Math.random() * 200); // Start above viewport
+      
+      const particle = Matter.Bodies.circle(startX, startY, 3 + Math.random() * 5, {
+        frictionAir: 0.02, // Gentle air resistance for floating effect
+        restitution: 0.6,
+        density: 0.001,
+        render: {
+          fillStyle: goldenColors[Math.floor(Math.random() * goldenColors.length)],
+          strokeStyle: '#FFFFFF',
+          lineWidth: 1,
+        },
+        collisionFilter: {
+          category: PlinkoEngine.EXPLOSION_CATEGORY, // Reuse explosion category
+          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY,
+        },
+      });
+      
+      // Add gentle downward and sideways motion
+      const horizontalDrift = (Math.random() - 0.5) * 4; // Gentle side-to-side drift
+      const downwardSpeed = 2 + Math.random() * 4; // Gentle falling speed
+      Matter.Body.setVelocity(particle, { x: horizontalDrift, y: downwardSpeed });
+      
+      this.celebrationParticles.push(particle);
+    }
+  }
+
+  private createCashOutBurst(x: number, y: number) {
+    // Immediate burst of celebratory particles from the ball location
+    const burstCount = 50;
+    const burstColors = ['#00FF00', '#32CD32', '#90EE90', '#98FB98', '#00FA9A', '#00FF7F']; // Bright greens
+    
+    for (let i = 0; i < burstCount; i++) {
+      const angle = (Math.PI * 2 * i) / burstCount + (Math.random() - 0.5) * 0.4;
+      const speed = 8 + Math.random() * 12; // Strong initial burst
+      const size = 4 + Math.random() * 6; // Medium to large particles
+      
+      const particle = Matter.Bodies.circle(x, y, size, {
+        frictionAir: 0.03,
+        restitution: 0.8,
+        density: 0.0015,
+        render: {
+          fillStyle: burstColors[Math.floor(Math.random() * burstColors.length)],
+          strokeStyle: '#FFFFFF',
+          lineWidth: 2,
+        },
+        collisionFilter: {
+          category: PlinkoEngine.EXPLOSION_CATEGORY,
+          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY,
+        },
+      });
+      
+      const velocityX = Math.cos(angle) * speed + (Math.random() - 0.5) * 3;
+      const velocityY = Math.sin(angle) * speed + (Math.random() - 0.5) * 3;
+      Matter.Body.setVelocity(particle, { x: velocityX, y: velocityY });
+      
+      this.celebrationParticles.push(particle);
+    }
+  }
+
+  private createSparkleRain(x: number, y: number) {
+    // Continuous sparkle effect with small bright particles
+    const sparkleCount = 100;
+    const sparkleColors = ['#FFFFFF', '#FFFF00', '#FFD700', '#FFF8DC', '#F0F8FF', '#E0FFFF']; // Whites and light colors
+    
+    for (let i = 0; i < sparkleCount; i++) {
+      // Create sparkles in a wide area around the cash out point
+      const spreadRadius = 150;
+      const angle = Math.PI * 2 * Math.random();
+      const distance = Math.random() * spreadRadius;
+      const sparkleX = x + Math.cos(angle) * distance;
+      const sparkleY = y + Math.sin(angle) * distance;
+      
+      const size = 2 + Math.random() * 3; // Small sparkles
+      
+      const particle = Matter.Bodies.circle(sparkleX, sparkleY, size, {
+        frictionAir: 0.05, // Higher air resistance for gentle floating
+        restitution: 0.9,
+        density: 0.0005,
+        render: {
+          fillStyle: sparkleColors[Math.floor(Math.random() * sparkleColors.length)],
+          strokeStyle: '#FFFF00',
+          lineWidth: 0.5,
+        },
+        collisionFilter: {
+          category: PlinkoEngine.EXPLOSION_CATEGORY,
+          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY,
+        },
+      });
+      
+      // Random motion in all directions with upward bias for magical effect
+      const randomAngle = Math.PI * 2 * Math.random();
+      const randomSpeed = 2 + Math.random() * 8;
+      const upwardBias = -2; // Slight upward movement for magical floating effect
+      
+      const velocityX = Math.cos(randomAngle) * randomSpeed;
+      const velocityY = Math.sin(randomAngle) * randomSpeed + upwardBias;
+      Matter.Body.setVelocity(particle, { x: velocityX, y: velocityY });
+      
+      this.celebrationParticles.push(particle);
+    }
+  }
+
+  private startScreenGlow() {
+    const maxGlowIntensity = 0.3; // Gentle glow, not overwhelming
+    const glowDuration = 2000; // 2 seconds of glow effect
+    const startTime = Date.now();
+    
+    const glowInterval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const progress = elapsed / glowDuration;
+      
+      if (progress >= 1 || !this.isCashOutCelebrating) {
+        // Reset camera to normal position when glow ends
+        Matter.Render.lookAt(this.render, {
+          min: { x: 0, y: this.cameraY },
+          max: { x: PlinkoEngine.WIDTH, y: this.cameraY + PlinkoEngine.HEIGHT }
+        });
+        clearInterval(glowInterval);
+        return;
+      }
+      
+      // Smooth glow curve - builds up, peaks, then fades
+      let glowMultiplier;
+      if (progress < 0.2) {
+        // Quick build up
+        glowMultiplier = progress / 0.2;
+      } else if (progress < 0.6) {
+        // Peak glow with gentle pulsing
+        const pulseBase = 0.8 + 0.2 * Math.sin((progress - 0.2) * Math.PI * 6);
+        glowMultiplier = pulseBase;
+      } else {
+        // Gentle fade out
+        glowMultiplier = 0.8 * (1 - ((progress - 0.6) / 0.4));
+      }
+      
+      const currentGlow = maxGlowIntensity * glowMultiplier;
+      
+      // Add gentle camera zoom/scale effect for celebration
+      const zoomFactor = 1 + (currentGlow * 0.1); // Very subtle zoom
+      const centerX = PlinkoEngine.WIDTH / 2;
+      const centerY = this.cameraY + PlinkoEngine.HEIGHT / 2;
+      
+      // Calculate zoomed bounds
+      const zoomedWidth = PlinkoEngine.WIDTH / zoomFactor;
+      const zoomedHeight = PlinkoEngine.HEIGHT / zoomFactor;
+      
+      Matter.Render.lookAt(this.render, {
+        min: { 
+          x: centerX - zoomedWidth / 2, 
+          y: centerY - zoomedHeight / 2 
+        },
+        max: { 
+          x: centerX + zoomedWidth / 2, 
+          y: centerY + zoomedHeight / 2 
+        }
+      });
+         }, 16); // ~60fps
+   }
+
+   private updateCelebrationParticles() {
+     if (!this.isCashOutCelebrating || this.celebrationParticles.length === 0) {
+       return;
+     }
+     
+     const elapsed = Date.now() - this.celebrationStartTime;
+     const progress = elapsed / this.celebrationDuration;
+     const time = Date.now();
+     
+     // Update particle appearance with celebration effects
+     for (let i = 0; i < this.celebrationParticles.length; i++) {
+       const particle = this.celebrationParticles[i];
+       if (!particle.render || !particle.render.fillStyle) continue;
+       
+       const baseColor = particle.render.fillStyle as string;
+       
+       // Calculate alpha with slower fade than explosion
+       let alpha;
+       if (progress < 0.3) {
+         // Stay bright longer than explosion
+         alpha = 1.0;
+       } else if (progress < 0.8) {
+         // Gradual fade
+         alpha = 1.0 - ((progress - 0.3) / 0.5) * 0.5;
+       } else {
+         // Final fade
+         alpha = 0.5 * (1 - ((progress - 0.8) / 0.2));
+       }
+       
+       // Add twinkling effect for sparkles and golden particles
+       const particleRadius = (particle as any).circleRadius || particle.bounds.max.x - particle.bounds.min.x;
+       if (particleRadius <= 5) { // Small sparkles
+         const twinkleSpeed = 0.015 + (i % 5) * 0.003; // Vary twinkle speed per particle
+         const twinkle = Math.sin(time * twinkleSpeed + i) * 0.4 + 0.6; // 0.2 to 1.0
+         alpha *= twinkle;
+       }
+       
+       // Golden particles get a warm glow effect
+       if (baseColor.includes('FFD700') || baseColor.includes('FFA500')) {
+         const glow = Math.sin(time * 0.008 + i) * 0.2 + 0.8; // 0.6 to 1.0
+         alpha *= glow;
+       }
+       
+       // Brighten colors over time instead of dimming (opposite of explosion)
+       let finalColor = baseColor;
+       if (baseColor.startsWith('#')) {
+         const r = parseInt(baseColor.substr(1, 2), 16);
+         const g = parseInt(baseColor.substr(3, 2), 16);
+         const b = parseInt(baseColor.substr(5, 2), 16);
+         
+         // Brighten colors over time for more celebratory effect
+         const brightnessFactor = 1 + (progress * 0.2); // Get brighter over time
+         const brightenedR = Math.min(255, r * brightnessFactor);
+         const brightenedG = Math.min(255, g * brightnessFactor);
+         const brightenedB = Math.min(255, b * brightnessFactor);
+         
+         finalColor = `rgba(${Math.round(brightenedR)}, ${Math.round(brightenedG)}, ${Math.round(brightenedB)}, ${Math.max(0, alpha)})`;
+       } else {
+         // Fallback for colors that don't start with #
+         finalColor = `rgba(255, 215, 0, ${Math.max(0, alpha)})`; // Gold fallback
+       }
+       
+       particle.render.fillStyle = finalColor;
+       
+       // Update stroke with complementary effect
+       if (particle.render.strokeStyle) {
+         const strokeAlpha = Math.min(alpha * 1.2, 1.0); // Stroke stays visible longer
+         particle.render.strokeStyle = `rgba(255, 255, 255, ${Math.max(0, strokeAlpha)})`;
+       }
+     }
+     
+     // Remove celebration particles after duration
+     if (progress >= 1) {
+       Matter.Composite.remove(this.engine.world, this.celebrationParticles);
+       this.celebrationParticles = [];
+     }
+   }
+
+   private updateCelebrationBall(progress: number) {
+     if (!this.celebratingBall || !this.celebratingBall.render) return;
+     
+     const time = Date.now();
+     
+     // Make the ball grow and pulse with golden effects
+     const pulseSpeed = 0.01;
+     const pulse = Math.sin(time * pulseSpeed) * 0.5 + 0.5; // 0 to 1
+     
+     // Grow the ball over time
+     const growthFactor = 1 + (progress * 0.8) + (pulse * 0.3); // Grows up to 1.8x + pulse
+     const newRadius = this.ballOriginalRadius * growthFactor;
+     
+     // Update ball scale (this is a visual effect, doesn't change physics)
+     // For Matter.js, we'll use rendering tricks to make it appear larger
+     const goldIntensity = Math.floor(150 + (pulse * 105)); // Gold from 150 to 255
+     const greenIntensity = Math.floor(200 + (pulse * 55)); // Green stays high
+     
+     // Create golden-green gradient effect
+     this.celebratingBall.render.fillStyle = `rgb(${goldIntensity}, ${greenIntensity}, 0)`;
+     this.celebratingBall.render.strokeStyle = '#FFD700';
+     this.celebratingBall.render.lineWidth = 4 + (pulse * 4); // Pulsing border
+     
+     // Add sparkling ring effect around the ball
+     this.addSparkleRingAroundBall();
+   }
+
+   private addSparkleRingAroundBall() {
+     if (!this.celebratingBall) return;
+     
+     const time = Date.now();
+     const ballX = this.celebratingBall.position.x;
+     const ballY = this.celebratingBall.position.y;
+     
+     // Create a few extra sparkles around the ball every few frames
+     if (time % 200 < 50) { // Create sparkles every 200ms for 50ms duration
+       for (let i = 0; i < 3; i++) {
+         const angle = (time * 0.005 + i * Math.PI * 2 / 3) % (Math.PI * 2);
+         const radius = this.ballOriginalRadius * 3; // Ring around the ball
+         const sparkleX = ballX + Math.cos(angle) * radius;
+         const sparkleY = ballY + Math.sin(angle) * radius;
+         
+         const sparkle = Matter.Bodies.circle(sparkleX, sparkleY, 2, {
+           frictionAir: 0.1,
+           restitution: 0.5,
+           density: 0.0001,
+           render: {
+             fillStyle: '#FFFF00',
+             strokeStyle: '#FFD700',
+             lineWidth: 1,
+           },
+           collisionFilter: {
+             category: PlinkoEngine.EXPLOSION_CATEGORY,
+             mask: 0, // No collisions
+           },
+         });
+         
+         // Give sparkles a short lifespan and gentle motion
+         const velocity = {
+           x: (Math.random() - 0.5) * 2,
+           y: (Math.random() - 0.5) * 2 - 1 // Slight upward bias
+         };
+         Matter.Body.setVelocity(sparkle, velocity);
+         
+         this.celebrationParticles.push(sparkle);
+         Matter.Composite.add(this.engine.world, sparkle);
+         
+         // Remove sparkle after a short time
+         setTimeout(() => {
+           if (this.celebrationParticles.includes(sparkle)) {
+             Matter.Composite.remove(this.engine.world, sparkle);
+             this.celebrationParticles.splice(this.celebrationParticles.indexOf(sparkle), 1);
+           }
+         }, 1000);
+       }
+     }
+   }
+  
+    private updateExplosionParticles() {
     if (!this.isGameDead || this.explosionParticles.length === 0) {
       return;
     }
@@ -907,35 +1265,39 @@ export default class PlinkoEngine {
       // Celebration effects complete - stop celebrating but don't reset game yet
       this.finishCashOutEffects();
     } else {
-      // Update green flash effects
+      // Update all celebration effects
       this.updateCashOutEffects(progress);
+      this.updateCelebrationParticles();
+      this.updateCelebrationBall(progress);
     }
   }
 
   private updateCashOutEffects(progress: number) {
-    if (!this.celebratingBall || !this.celebratingBall.render) return;
-    
-    // Create pulsing green effect for the ball
-    const pulse = Math.sin(progress * Math.PI * 8) * 0.5 + 0.5; // Fast pulsing
-    const greenIntensity = 100 + (pulse * 155); // Green from 100 to 255
-    
-    // Make ball flash bright green
-    this.celebratingBall.render.fillStyle = '#A3E635';
-    this.celebratingBall.render.strokeStyle = '#A3E635';
-    this.celebratingBall.render.lineWidth = 3 + (pulse * 2);
-    
-    // Add screen-wide green pulse effect
-    this.updateScreenGreenPulse(progress, pulse);
+    // The old simple green effects are now replaced by the spectacular celebration system
+    // This method now handles the golden background overlay effect
+    this.updateScreenGoldenOverlay(progress);
   }
 
-  private updateScreenGreenPulse(progress: number, pulse: number) {
-    // Create screen-wide green overlay effect by manipulating render background
-    const greenAlpha = (pulse * 0.15) * (1 - progress); // Fade out over time
-    const greenOverlay = `rgba(163, 230, 53, ${greenAlpha})`;
+  private updateScreenGoldenOverlay(progress: number) {
+    // Create a subtle golden background overlay that complements the particles
+    const time = Date.now();
+    const pulse = Math.sin(time * 0.01) * 0.5 + 0.5; // Gentle pulsing
     
-    // Apply green tint to the render background temporarily
+    // Golden overlay that starts strong and fades gradually
+    let overlayAlpha;
+    if (progress < 0.2) {
+      overlayAlpha = 0.15 * pulse; // Start with golden glow
+    } else if (progress < 0.7) {
+      overlayAlpha = 0.15 * pulse * (1 - ((progress - 0.2) / 0.5) * 0.8); // Gentle fade
+    } else {
+      overlayAlpha = 0.03 * pulse; // Very subtle by the end
+    }
+    
+    const goldenOverlay = `rgba(255, 215, 0, ${overlayAlpha})`;
+    
+    // Apply golden tint to the render background
     if (this.render.options) {
-      this.render.options.background = greenOverlay;
+      this.render.options.background = goldenOverlay;
     }
   }
 
@@ -945,6 +1307,12 @@ export default class PlinkoEngine {
     // Reset celebration state
     this.isCashOutCelebrating = false;
     this.celebratingBall = null;
+
+    // Clean up celebration particles
+    if (this.celebrationParticles.length > 0) {
+      Matter.Composite.remove(this.engine.world, this.celebrationParticles);
+      this.celebrationParticles = [];
+    }
 
     // Reset render background
     if (this.render.options) {
@@ -1407,16 +1775,17 @@ export default class PlinkoEngine {
       return [...history, newTotal];
     });
 
-    // Set celebration state
-    this.isCashOutCelebrating = true;
-    this.celebrationStartTime = Date.now();
-    this.celebratingBall = this.trackedBall; // Celebrate the ball that just won
+    // Set celebration state and create spectacular celebration effects
+    this.celebratingBall = this.trackedBall; // Set the celebrating ball first
     
     // Freeze the ball immediately by making it static
     if (this.celebratingBall) {
       Matter.Body.setStatic(this.celebratingBall, true);
       // Also zero out any velocity to ensure it stops completely
       Matter.Body.setVelocity(this.celebratingBall, { x: 0, y: 0 });
+      
+      // Create the spectacular cash out celebration at the ball's position
+      this.createCashOutCelebration(this.celebratingBall.position.x, this.celebratingBall.position.y);
     }
     
     // Stop camera tracking immediately - game is paused during celebration
@@ -1662,6 +2031,12 @@ export default class PlinkoEngine {
     if (this.explosionParticles.length > 0) {
       Matter.Composite.remove(this.engine.world, this.explosionParticles);
       this.explosionParticles = [];
+    }
+    
+    // Remove celebration particles if any
+    if (this.celebrationParticles.length > 0) {
+      Matter.Composite.remove(this.engine.world, this.celebrationParticles);
+      this.celebrationParticles = [];
     }
     
     // Complete any ongoing cash out celebration first
