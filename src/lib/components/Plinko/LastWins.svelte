@@ -29,7 +29,7 @@
     >
       <span>{binPayouts[rowCount][riskLevel][binIndex]}{binPayouts[rowCount][riskLevel][binIndex] < 100 ? '×' : ''}</span>
       {#if multiplier !== binPayouts[rowCount][riskLevel][binIndex]}
-        <span class="text-xs text-red-600">({multiplier}×)</span>
+        <span class="text-xs" style="color: #EF4444;">({multiplier}×)</span>
       {/if}
     </div>
   {/each}

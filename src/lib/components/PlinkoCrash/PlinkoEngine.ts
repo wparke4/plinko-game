@@ -370,8 +370,8 @@ export default class PlinkoEngine {
         isStatic: true,
         isSensor: true, // Make it a sensor so balls pass through but we can detect collision
         render: {
-          fillStyle: '#ff0044', // Bright neon red
-          strokeStyle: '#ff6666',
+          fillStyle: '#EF4444', // Bright neon red
+          strokeStyle: '#EF4444',
           lineWidth: 3,
         },
         collisionFilter: {
@@ -504,8 +504,8 @@ export default class PlinkoEngine {
           isStatic: true,
           isSensor: true,
           render: {
-            fillStyle: isDeathRow ? 'rgba(255, 0, 68, 0.5)' : 'rgba(163, 230, 53, 0.5)', // Semi-transparent red or green
-            strokeStyle: isDeathRow ? 'rgba(255, 102, 102, 0.8)' : 'rgba(163, 230, 53, 0.8)',
+            fillStyle: isDeathRow ? 'rgba(239, 68, 68, 0.5)' : 'rgba(163, 230, 53, 0.5)', // Semi-transparent red or green
+            strokeStyle: isDeathRow ? 'rgba(239, 68, 68, 0.8)' : 'rgba(163, 230, 53, 0.8)',
             lineWidth: 2,
           },
           collisionFilter: {
@@ -607,8 +607,8 @@ export default class PlinkoEngine {
       
       // Update the passage color with calculated opacity
       if (isDeathRow) {
-        passage.render.fillStyle = `rgba(255, 0, 68, ${finalOpacity})`;
-        passage.render.strokeStyle = `rgba(255, 102, 102, ${Math.min(finalOpacity + 0.2, 1)})`;
+        passage.render.fillStyle = `rgba(239, 68, 68, ${finalOpacity})`;
+        passage.render.strokeStyle = `rgba(239, 68, 68, ${Math.min(finalOpacity + 0.2, 1)})`;
       } else {
         passage.render.fillStyle = `rgba(163, 230, 53, ${finalOpacity})`;
         passage.render.strokeStyle = `rgba(163, 230, 53, ${Math.min(finalOpacity + 0.2, 1)})`;
@@ -655,7 +655,7 @@ export default class PlinkoEngine {
     
     // Create multiple waves of explosion particles
     const particleCount = 50; // Total number of particles
-    const colors = ['#ff0000', '#ff4400', '#ff8800', '#ffaa00', '#ffff00', '#ffffff'];
+    const colors = ['#EF4444', '#EF4444', '#EF4444', '#ffaa00', '#ffff00', '#ffffff'];
     
     for (let i = 0; i < particleCount; i++) {
       // Create particles with random angles and speeds

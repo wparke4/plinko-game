@@ -117,7 +117,7 @@
   }
 
   :global(.multiplier.game-dead) {
-    color: rgba(255, 0, 0, 1); /* Bright red when game is dead */
+    color: rgba(239, 68, 68, 1); /* Bright red when game is dead */
   }
 
   .multiplier-container {

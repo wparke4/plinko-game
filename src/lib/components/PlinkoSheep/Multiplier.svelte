@@ -26,8 +26,8 @@
   }
 
   .multiplier.game-dead {
-    color: #ff4444; /* Bright red when player dies */
-    text-shadow: 0 0 8px rgba(255, 68, 68, 0.5);
+    color: #EF4444; /* Bright red when player dies */
+    text-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
   }
   
   .multiplier.flashing {
@@ -37,13 +37,13 @@
   
   @keyframes greenPulse {
     0% {
-      color: #00ff00;
-      text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00, 0 0 15px #00ff00;
+      color: #A3E635;
+      text-shadow: 0 0 5px #A3E635, 0 0 10px #A3E635, 0 0 15px #A3E635;
       transform: scale(1.1);
     }
     100% {
-      color: #88ff88;
-      text-shadow: 0 0 3px #00ff00, 0 0 6px #00ff00, 0 0 9px #00ff00;
+      color: #A3E635;
+      text-shadow: 0 0 3px #A3E635, 0 0 6px #A3E635, 0 0 9px #A3E635;
       transform: scale(1.2);
     }
   }
