@@ -112,7 +112,7 @@ export default class PlinkoEngine {
   private isPreviewPassagesActive: boolean = false;
 
   // Progressive spacing configuration
-  static readonly SPACING_INCREASE_PER_ROW = 0.05; // 3% increase per row
+  static readonly SPACING_INCREASE_PER_ROW = 0.005; // 3% increase per row
   static readonly MAX_SPACING_MULTIPLIER = 1.5; // Maximum 100% increase (2x original)
 
   constructor(canvas: HTMLCanvasElement) {
