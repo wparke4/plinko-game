@@ -2,6 +2,7 @@ import Matter from 'matter-js';
 import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory, currentMultiplier, gameState } from '$lib/stores/game';
 import { RiskLevel, type RowCount } from '$lib/types';
 import { get } from 'svelte/store';
+import AudioManager from './AudioManager';
 
 export default class PlinkoEngine {
   static readonly WIDTH = 800;
@@ -53,6 +54,7 @@ export default class PlinkoEngine {
   private readyBall: Matter.Body | null = null;
   private readyBallDirection: number = 1; // 1 for right, -1 for left
   private keydownHandler: (event: KeyboardEvent) => void;
+  private audioManager: AudioManager;
   
   // Dynamic row management
   private lastGeneratedRowY: number = 0;
@@ -117,6 +119,9 @@ export default class PlinkoEngine {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
+    
+    // Initialize audio manager
+    this.audioManager = new AudioManager();
     
     // Initialize risk level configuration
     this.currentRiskLevel = RiskLevel.HIGH;
@@ -1512,6 +1517,9 @@ export default class PlinkoEngine {
     // Stop preview passage animations and clean up timers
     this.stopAllPreviewOpacityAnimations();
     
+    // Clean up audio manager
+    this.audioManager.destroy();
+    
     // Remove keyboard event listener
     window.removeEventListener('keydown', this.keydownHandler);
   }
@@ -1549,6 +1557,10 @@ export default class PlinkoEngine {
       if (newMultiplier !== this.currentMultiplier) {
         this.currentMultiplier = newMultiplier;
         currentMultiplier.set(this.currentMultiplier); // Update the store for reactivity
+        
+        // Play progressive multiplier tone
+        this.audioManager.playMultiplierTone(this.currentMultiplier);
+        
         console.log('Multiplier Update:', {
           ballY,
           startingRowY: this.startingRowY,
@@ -1737,6 +1749,10 @@ export default class PlinkoEngine {
 
     console.log('Dropping ball...');
 
+    // Play ball drop sound and unlock audio context if needed
+    this.audioManager.unlockAudio(); // This will unlock audio on first user interaction
+    this.audioManager.playBallDropSound();
+
     // Generate final passage positions (this will stop preview animations and create actual passages)
     console.log('Stopping preview animations and generating final passage positions...');
     
@@ -1916,6 +1932,9 @@ export default class PlinkoEngine {
       const newTotal = (history[history.length - 1] || 0) + profit;
       return [...history, newTotal];
     });
+
+    // Play cash out success sound
+    this.audioManager.playCashOutSound(displayedMultiplier);
 
     // Set celebration state and create spectacular celebration effects
     this.celebratingBall = this.trackedBall; // Set the celebrating ball first
@@ -2100,6 +2119,9 @@ export default class PlinkoEngine {
     this.trackedBall = null;
     this.isCameraTracking = false;
 
+    // Play death explosion sound
+    this.audioManager.playDeathSound();
+
     // CREATE THE EXPLOSION! 🎆💥
     this.createExplosion(explosionX, explosionY);
 
@@ -2145,6 +2167,15 @@ export default class PlinkoEngine {
       isCashOutCelebrating: this.isCashOutCelebrating,
       isCashOutComplete: this.isCashOutComplete
     });
+  }
+
+  // Audio control methods
+  public setAudioMuted(muted: boolean) {
+    this.audioManager.setMuted(muted);
+  }
+
+  public toggleAudioMute() {
+    this.audioManager.toggleMute();
   }
 
   // Add reset method to allow starting a new game

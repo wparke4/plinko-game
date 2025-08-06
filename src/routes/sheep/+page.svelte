@@ -2,6 +2,8 @@
   import LiveStatsWindow from '$lib/components/LiveStatsWindow/LiveStatsWindow.svelte';
   import PlinkoCrash from '$lib/components/PlinkoCrash';
   import SettingsWindow from '$lib/components/SettingsWindow';
+  import AudioControls from '$lib/components/ui/AudioControls.svelte';
+  import { plinkoEngine } from '$lib/stores/game';
 
 
 </script>
@@ -22,6 +24,7 @@
 
   <SettingsWindow />
   <LiveStatsWindow />
+  <AudioControls plinkoEngine={$plinkoEngine} />
 </div>
 
 <style lang="postcss">
