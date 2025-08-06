@@ -768,8 +768,8 @@ export default class PlinkoEngine {
   }
 
   private startScreenShake() {
-    const maxShakeIntensity = 25; // Increased from 15
-    const shakeDuration = 1500; // Increased from 1000ms to 1.5 seconds
+    const maxShakeIntensity = 9; // Increased from 15
+    const shakeDuration = 600; // Increased from 1000ms to 1.5 seconds
     const startTime = Date.now();
     
     const shakeInterval = setInterval(() => {
