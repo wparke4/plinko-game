@@ -189,9 +189,9 @@ export default class AudioManager {
       const totalDuration = config.duration;
       const noteInterval = totalDuration / config.noteCount;
       
-      // Lower, more powerful frequencies
-      const baseFreq = 880; // A5 - much lower and more powerful than before
-      const frequencies = [880, 1100, 1320, 1760]; // Strong, punchy frequencies
+      // Lower, warmer frequencies that are less annoying
+      const baseFreq = 440; // A4 - warm, pleasant middle register
+      const frequencies = [440, 550, 660, 880]; // Warm, musical frequencies
       
       // Create powerful staccato notes
       for (let i = 0; i < config.noteCount; i++) {
@@ -210,13 +210,13 @@ export default class AudioManager {
         filter.frequency.setValueAtTime(1200, currentTime + noteDelay);
         filter.Q.setValueAtTime(3, currentTime + noteDelay);
         
-        // Main oscillator - punchy square wave
-        mainOsc.type = 'square';
+        // Main oscillator - warm triangle wave
+        mainOsc.type = 'triangle';
         const mainFreq = frequencies[i % frequencies.length];
         mainOsc.frequency.setValueAtTime(mainFreq, currentTime + noteDelay);
         
-        // Sub oscillator - adds low-end punch
-        subOsc.type = 'sawtooth';
+        // Sub oscillator - adds warm low-end
+        subOsc.type = 'sine';
         subOsc.frequency.setValueAtTime(mainFreq / 2, currentTime + noteDelay); // Octave down
         
         // Tier-based volume with progressive intensity
@@ -361,8 +361,8 @@ export default class AudioManager {
     const osc = this.audioContext.createOscillator();
     const gain = this.audioContext.createGain();
     
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(1320, startTime); // E6
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(660, startTime); // E5 - much lower and warmer
     
     gain.gain.setValueAtTime(0, startTime);
     gain.gain.linearRampToValueAtTime(volume, startTime + 0.02);
@@ -380,14 +380,14 @@ export default class AudioManager {
   private createHarmonyFinale(startTime: number, volume: number) {
     if (!this.audioContext || !this.masterGainNode) return;
     
-    // Create a harmony chord (E major)
-    const frequencies = [1320, 1650, 1980]; // E6, G#6, B6
+    // Create a harmony chord (E major) - much lower and warmer
+    const frequencies = [660, 825, 990]; // E5, G#5, B5
     
     frequencies.forEach((freq, index) => {
       const osc = this.audioContext!.createOscillator();
       const gain = this.audioContext!.createGain();
       
-      osc.type = 'square';
+      osc.type = 'triangle';
       osc.frequency.setValueAtTime(freq, startTime);
       
       const noteVolume = volume * (1 - index * 0.15); // Lower volume for higher notes
@@ -408,16 +408,16 @@ export default class AudioManager {
   private createEpicFinale(startTime: number, volume: number) {
     if (!this.audioContext || !this.masterGainNode) return;
     
-    // Create massive chord with multiple layers
-    const mainChord = [1320, 1650, 1980, 2640]; // E6, G#6, B6, E7
-    const subChord = [660, 825, 990]; // E5, G#5, B5 (octave down)
+    // Create massive chord with multiple layers - lower and warmer
+    const mainChord = [660, 825, 990, 1320]; // E5, G#5, B5, E6
+    const subChord = [330, 412.5, 495]; // E4, G#4, B4 (octave down)
     
     // Main chord
     mainChord.forEach((freq, index) => {
       const osc = this.audioContext!.createOscillator();
       const gain = this.audioContext!.createGain();
       
-      osc.type = 'square';
+      osc.type = 'triangle';
       osc.frequency.setValueAtTime(freq, startTime);
       
       const noteVolume = volume * (1 - index * 0.1);
@@ -434,12 +434,12 @@ export default class AudioManager {
       osc.stop(startTime + 0.5);
     });
     
-    // Sub chord for power
+    // Sub chord for warmth
     subChord.forEach((freq, index) => {
       const osc = this.audioContext!.createOscillator();
       const gain = this.audioContext!.createGain();
       
-      osc.type = 'sawtooth';
+      osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, startTime);
       
       const noteVolume = volume * 0.4 * (1 - index * 0.1);
@@ -460,22 +460,22 @@ export default class AudioManager {
   private createLegendaryFinale(startTime: number, volume: number) {
     if (!this.audioContext || !this.masterGainNode) return;
     
-    // Create absolutely massive orchestral-style finale
-    const mainChord = [1320, 1650, 1980, 2640, 3300]; // Extended E major
-    const harmonyChord = [660, 825, 990, 1320]; // Lower harmony
-    const bassLine = [330, 412.5]; // Very low bass
+    // Create absolutely massive orchestral-style finale - lower and warmer
+    const mainChord = [660, 825, 990, 1320, 1650]; // Extended E major, much lower
+    const harmonyChord = [330, 412.5, 495, 660]; // Lower harmony  
+    const bassLine = [165, 206.25]; // Very low bass
     
-    // Main bright chord
+    // Main warm chord
     mainChord.forEach((freq, index) => {
       const osc = this.audioContext!.createOscillator();
       const gain = this.audioContext!.createGain();
       const filter = this.audioContext!.createBiquadFilter();
       
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(4000, startTime);
-      filter.Q.setValueAtTime(2, startTime);
+      filter.frequency.setValueAtTime(2000, startTime); // Lower filter frequency for warmth
+      filter.Q.setValueAtTime(1.5, startTime);
       
-      osc.type = 'square';
+      osc.type = 'triangle';
       osc.frequency.setValueAtTime(freq, startTime);
       
       const noteVolume = volume * (1 - index * 0.08);
@@ -498,7 +498,7 @@ export default class AudioManager {
       const osc = this.audioContext!.createOscillator();
       const gain = this.audioContext!.createGain();
       
-      osc.type = 'sawtooth';
+      osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, startTime + 0.1); // Slightly delayed
       
       const noteVolume = volume * 0.5 * (1 - index * 0.1);
