@@ -59,7 +59,7 @@
 <div class="relative bg-black">
   <div class="mx-auto flex h-full flex-col px-4" style:max-width={`${WIDTH}px`}>
     <!-- Move multiplier above the game area -->
-    <div class="mt-6 mb-4 flex justify-center">
+    <div class="mt-12 mb-4 flex justify-center">
       <div class="multiplier-container">
         <Multiplier multiplier={$currentMultiplier} />
       </div>

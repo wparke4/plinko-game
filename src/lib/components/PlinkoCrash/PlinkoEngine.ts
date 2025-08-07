@@ -56,6 +56,13 @@ export default class PlinkoEngine {
   private keydownHandler: (event: KeyboardEvent) => void;
   private audioManager: AudioManager;
   
+  // Fixed timestep timing
+  private readonly FIXED_TIMESTEP = 1000 / 60; // 16.666ms per physics update (60 FPS)
+  private lastPhysicsTime: number = 0;
+  private physicsAccumulator: number = 0;
+  private animationFrameId: number | null = null;
+  private isRunning: boolean = false;
+  
   // Dynamic row management
   private lastGeneratedRowY: number = 0;
   private firstVisibleRowY: number = 0;
@@ -172,15 +179,11 @@ export default class PlinkoEngine {
     this.setupWorld();
     this.placePinsAndWalls();
 
-    // Create runner with fixed timing for consistent gameplay across different refresh rates
-    this.runner = Matter.Runner.create({
-      delta: 1000 / 60, // Fixed 60 FPS timing - 16.666ms per frame
-      isFixed: true
-    });
+    // Create runner (we'll control timing manually for true refresh-rate independence)
+    this.runner = Matter.Runner.create();
 
-    // Setup camera update and velocity limiting
+    // Setup camera update and velocity limiting - we'll call this manually in our custom loop
     Matter.Events.on(this.engine, 'beforeUpdate', () => {
-      console.log('Engine update tick');
       this.updateCamera();
       this.limitBallVelocities();
       this.handleBallWrapping();
@@ -1493,8 +1496,10 @@ export default class PlinkoEngine {
   }
 
   start() {
-    Matter.Runner.run(this.runner, this.engine);
-    Matter.Render.run(this.render);
+    this.isRunning = true;
+    this.lastPhysicsTime = performance.now();
+    this.physicsAccumulator = 0;
+    
     this.createReadyBall();
 
     // Initialize game state for UI reactivity
@@ -1507,9 +1512,19 @@ export default class PlinkoEngine {
 
     // Add keyboard event listener
     window.addEventListener('keydown', this.keydownHandler);
+    
+    // Start our custom timing loop
+    this.startFixedTimestepLoop();
   }
 
   stop() {
+    this.isRunning = false;
+    
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+    
     Matter.Runner.stop(this.runner);
     Matter.Render.stop(this.render);
     Matter.Engine.clear(this.engine);
@@ -1522,6 +1537,40 @@ export default class PlinkoEngine {
     
     // Remove keyboard event listener
     window.removeEventListener('keydown', this.keydownHandler);
+  }
+
+  private startFixedTimestepLoop() {
+    if (!this.isRunning) return;
+    
+    const currentTime = performance.now();
+    const deltaTime = currentTime - this.lastPhysicsTime;
+    this.lastPhysicsTime = currentTime;
+    
+    // Accumulate time since last frame
+    this.physicsAccumulator += deltaTime;
+    
+    // Run physics updates at fixed timestep, regardless of display refresh rate
+    let physicsUpdates = 0;
+    const maxPhysicsUpdates = 5; // Prevent spiral of death if game falls behind
+    
+    while (this.physicsAccumulator >= this.FIXED_TIMESTEP && physicsUpdates < maxPhysicsUpdates) {
+      // Update physics with fixed timestep
+      Matter.Engine.update(this.engine, this.FIXED_TIMESTEP);
+      
+      this.physicsAccumulator -= this.FIXED_TIMESTEP;
+      physicsUpdates++;
+    }
+    
+    // Cap accumulator to prevent spiral of death
+    if (this.physicsAccumulator > this.FIXED_TIMESTEP * maxPhysicsUpdates) {
+      this.physicsAccumulator = this.FIXED_TIMESTEP;
+    }
+    
+    // Render the current state (interpolation could be added here for smoother visuals)
+    Matter.Render.world(this.render);
+    
+    // Schedule next frame
+    this.animationFrameId = requestAnimationFrame(() => this.startFixedTimestepLoop());
   }
 
   private updateCamera() {
