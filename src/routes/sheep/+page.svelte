@@ -3,14 +3,45 @@
   import PlinkoCrash from '$lib/components/PlinkoCrash';
   import SettingsWindow from '$lib/components/SettingsWindow';
   import AudioControls from '$lib/components/ui/AudioControls.svelte';
+  import { Select } from '$lib/components/ui';
   import { plinkoEngine } from '$lib/stores/game';
 
+  // Refresh rate options for dropdown
+  const refreshRateOptions = [
+    { value: 60, label: '60 FPS' },
+    { value: 75, label: '75 FPS' },
+    { value: 90, label: '90 FPS' },
+    { value: 105, label: '105 FPS' },
+    { value: 120, label: '120 FPS' }
+  ];
+  let currentRefreshRate = $state(90);
 
+  // Update engine when refresh rate changes
+  $effect(() => {
+    if ($plinkoEngine && currentRefreshRate) {
+      $plinkoEngine.setRefreshRate(currentRefreshRate);
+    }
+  });
+
+  // Update current refresh rate when engine changes
+  $effect(() => {
+    if ($plinkoEngine) {
+      currentRefreshRate = $plinkoEngine.getCurrentRefreshRate();
+    }
+  });
 </script>
 
 
 
 <div class="relative flex min-h-dvh w-full flex-col bg-black">
+  <!-- Top Right Physics Rate Dropdown (below audio controls) -->
+  <div class="fixed top-20 right-5 z-[999] w-32">
+    <Select 
+      bind:value={currentRefreshRate}
+      items={refreshRateOptions}
+      title="Physics update rate"
+    />
+  </div>
 
   <div class="flex-1 px-5">
     <div class="mx-auto mt-3 max-w-xl min-w-[300px] drop-shadow-xl md:mt-6 lg:max-w-7xl">

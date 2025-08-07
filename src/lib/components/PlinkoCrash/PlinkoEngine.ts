@@ -57,7 +57,8 @@ export default class PlinkoEngine {
   private audioManager: AudioManager;
   
   // Fixed timestep timing
-  private readonly FIXED_TIMESTEP = 1000 / 60; // 16.666ms per physics update (60 FPS)
+  private FIXED_TIMESTEP = 1000 / 90; // 11.111ms per physics update (90 FPS default)
+  private currentRefreshRate: number = 90; // Track current refresh rate
   private lastPhysicsTime: number = 0;
   private physicsAccumulator: number = 0;
   private animationFrameId: number | null = null;
@@ -2206,6 +2207,23 @@ export default class PlinkoEngine {
   // Add method to check if cash out is complete
   public getIsCashOutComplete(): boolean {
     return this.isCashOutComplete;
+  }
+
+  // Add method to change refresh rate
+  public setRefreshRate(fps: number) {
+    if (fps <= 0 || fps > 240) { // Reasonable bounds
+      console.warn('Invalid refresh rate:', fps, 'Using default 60 FPS');
+      fps = 60;
+    }
+    
+    this.currentRefreshRate = fps;
+    this.FIXED_TIMESTEP = 1000 / fps;
+    console.log(`Refresh rate changed to ${fps} FPS (${this.FIXED_TIMESTEP.toFixed(3)}ms per frame)`);
+  }
+
+  // Get current refresh rate
+  public getCurrentRefreshRate(): number {
+    return this.currentRefreshRate;
   }
 
   // Update the reactive game state store
