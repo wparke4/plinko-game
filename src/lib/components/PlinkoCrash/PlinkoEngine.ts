@@ -4,6 +4,22 @@ import { RiskLevel, type RowCount } from '$lib/types';
 import { get } from 'svelte/store';
 import AudioManager from './AudioManager';
 
+// Bonus type configuration
+enum BonusType {
+  X2 = 'x2',
+  X5 = 'x5',
+  X10 = 'x10'
+}
+
+interface BonusConfig {
+  multiplier: number;
+  spawnRate: number; // 0-1 probability
+  fillStyle: string;
+  strokeStyle: string;
+  glowColor: string;
+  textColor: string;
+}
+
 export default class PlinkoEngine {
   static readonly WIDTH = 800;
   static readonly HEIGHT = 530;
@@ -137,7 +153,33 @@ export default class PlinkoEngine {
   static readonly BONUS_ENABLED = true; // Toggle to enable/disable bonus passages
   static readonly BONUS_TESTING_MODE = true; // Testing mode: first 10 rows get bonus passages
   static readonly BONUS_ROWS_INTERVAL = 10; // Place bonus every X rows
-  static readonly BONUS_MULTIPLIER = 2.0; // Multiplier applied to current multiplier when hitting bonus
+  // Bonus configuration with multipliers, spawn rates, and colors
+  static readonly BONUS_CONFIGS: Record<BonusType, BonusConfig> = {
+    [BonusType.X2]: {
+      multiplier: 2.0,
+      spawnRate: 0.66, // 66%
+      fillStyle: '#FFD700', // Bright golden color
+      strokeStyle: '#FF6B00', // Bright orange stroke
+      glowColor: '#FFD700',
+      textColor: '#FFFFFF'
+    },
+    [BonusType.X5]: {
+      multiplier: 5.0,
+      spawnRate: 0.22, // 22%
+      fillStyle: '#8B00FF', // Bright neon purple
+      strokeStyle: '#6A00CC', // Darker purple stroke
+      glowColor: '#8B00FF',
+      textColor: '#FFFFFF'
+    },
+    [BonusType.X10]: {
+      multiplier: 10.0,
+      spawnRate: 0.12, // 12%
+      fillStyle: '#FF1493', // Bright neon pink
+      strokeStyle: '#E6007E', // Darker pink stroke
+      glowColor: '#FF1493',
+      textColor: '#FFFFFF'
+    }
+  };
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -612,22 +654,49 @@ export default class PlinkoEngine {
   }
 
   private shouldPlaceBonusPassageTestingMode(rowIndex: number): boolean {
-    // TESTING MODE RULES:
-    // - Place bonus on first 10 rows (row indices 0..9)
-    // - Only on rows that would be GREEN (cash-out), never on death rows
-    
-    if (rowIndex >= 10) return false;
-
-    // Determine if this row is a death row (even index + 1 divisible by 2)
-    const isDeathRow = (rowIndex + 1) % 2 === 0;
-    if (isDeathRow) return false;
-
-    console.log(`🎰 Testing mode: placing bonus on row ${rowIndex}`);
+    // Testing mode: place bonus on rows 1-10
+    if (rowIndex >= 1 && rowIndex <= 10) {
+      console.log(`🎰 Testing mode: placing bonus on row ${rowIndex}`);
     return true;
+  }
+  
+  return false;
+}
+
+  private selectBonusType(): BonusType {
+    const random = Math.random();
+    let cumulativeRate = 0;
+    
+    // Check each bonus type in order based on cumulative spawn rates
+    for (const [type, config] of Object.entries(PlinkoEngine.BONUS_CONFIGS)) {
+      cumulativeRate += config.spawnRate;
+      if (random <= cumulativeRate) {
+        return type as BonusType;
+      }
+    }
+    
+    // Fallback to x2 if something goes wrong
+    return BonusType.X2;
+  }
+
+  private hexToRgb(hex: string): string {
+    // Remove the hash if present
+    hex = hex.replace('#', '');
+    
+    // Parse the hex values
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    
+    return `${r}, ${g}, ${b}`;
   }
 
   private createBonusPassage(rowY: number, isOffset: boolean, rowIndex: number) {
     const { BONUS_PASSAGE_CATEGORY, BALL_CATEGORY, BONUS_PASSAGE_WIDTH, BONUS_PASSAGE_HEIGHT, REFERENCE_PIN_SPACING } = PlinkoEngine;
+    
+    // Select bonus type based on spawn rates
+    const bonusType = this.selectBonusType();
+    const bonusConfig = PlinkoEngine.BONUS_CONFIGS[bonusType];
     
     // Use fixed pin spacing and dynamic padding
     const pinSpacing = REFERENCE_PIN_SPACING;
@@ -659,9 +728,7 @@ export default class PlinkoEngine {
         isStatic: true,
         isSensor: true, // Make it a sensor so balls pass through but we can detect collision
         render: {
-          fillStyle: '#FFD700', // Bright golden color
-          strokeStyle: '#FF6B00', // Bright orange stroke
-          lineWidth: 4, // Thicker stroke
+          visible: false, // Hide from Matter.js renderer since we render manually
         },
         collisionFilter: {
           category: BONUS_PASSAGE_CATEGORY,
@@ -670,15 +737,16 @@ export default class PlinkoEngine {
       }
     );
     
-    // Add a special property to identify this as a bonus passage for custom rendering
+    // Add special properties to identify this as a bonus passage with its type
     (bonusPassage as any).isBonusPassage = true;
+    (bonusPassage as any).bonusType = bonusType;
+    (bonusPassage as any).bonusConfig = bonusConfig;
     (bonusPassage as any).bonusCreationTime = Date.now();
     
     this.bonusPassages.push(bonusPassage);
     this.rowBonusPassages.set(rowY, bonusPassage);
-    Matter.Composite.add(this.engine.world, bonusPassage);
-    
-    console.log(`💰 CREATED BONUS PASSAGE: Row ${rowIndex}, Y: ${rowY.toFixed(1)}, X: ${passageX.toFixed(1)} - Look for golden "x2" passage!`);
+
+    Matter.World.add(this.engine.world, bonusPassage);
   }
 
   private renderBonusPassageTexts() {
@@ -695,6 +763,10 @@ export default class PlinkoEngine {
     for (const bonusPassage of this.bonusPassages) {
       if (!(bonusPassage as any).isBonusPassage) continue;
       
+      // Get bonus type and configuration
+      const bonusType = (bonusPassage as any).bonusType as BonusType;
+      const bonusConfig = (bonusPassage as any).bonusConfig as BonusConfig;
+      
       // Get screen coordinates (account for camera position)
       const screenX = bonusPassage.position.x;
       const screenY = bonusPassage.position.y - this.cameraY;
@@ -709,15 +781,37 @@ export default class PlinkoEngine {
       const pulseTime = (currentTime - creationTime) * 0.003; // Slower pulse
       const pulse = Math.sin(pulseTime) * 0.3 + 0.7; // 0.4 to 1.0
       
-      // Enhanced glow effect
+      // Enhanced glow effect using bonus-specific color
       const glowIntensity = pulse;
-      ctx.shadowColor = '#FFD700';
+      ctx.shadowColor = bonusConfig.glowColor;
       ctx.shadowBlur = 15 * glowIntensity;
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
       
-      // Draw the "x2" text
-      ctx.fillStyle = '#FFFFFF';
+      // Render the bonus passage rectangle with correct colors
+      ctx.fillStyle = bonusConfig.fillStyle;
+      ctx.strokeStyle = bonusConfig.strokeStyle;
+      ctx.lineWidth = 4;
+      
+      // Draw the passage rectangle
+      ctx.fillRect(
+        screenX - PlinkoEngine.BONUS_PASSAGE_WIDTH/2,
+        screenY - PlinkoEngine.BONUS_PASSAGE_HEIGHT/2,
+        PlinkoEngine.BONUS_PASSAGE_WIDTH,
+        PlinkoEngine.BONUS_PASSAGE_HEIGHT
+      );
+      ctx.strokeRect(
+        screenX - PlinkoEngine.BONUS_PASSAGE_WIDTH/2,
+        screenY - PlinkoEngine.BONUS_PASSAGE_HEIGHT/2,
+        PlinkoEngine.BONUS_PASSAGE_WIDTH,
+        PlinkoEngine.BONUS_PASSAGE_HEIGHT
+      );
+      
+      // Reset shadow for text rendering
+      ctx.shadowBlur = 15 * glowIntensity;
+      
+      // Draw the multiplier text (x2, x5, or x10)
+      ctx.fillStyle = bonusConfig.textColor;
       ctx.strokeStyle = '#000000';
       ctx.lineWidth = 4;
       ctx.font = 'bold 18px Arial';
@@ -725,12 +819,12 @@ export default class PlinkoEngine {
       ctx.textBaseline = 'middle';
       
       // Draw text with outline for better visibility
-      ctx.strokeText('x2', screenX, screenY);
-      ctx.fillText('x2', screenX, screenY);
+      ctx.strokeText(bonusType, screenX, screenY);
+      ctx.fillText(bonusType, screenX, screenY);
       
-      // Draw additional glow around the passage
+      // Draw additional glow around the passage using bonus-specific color
       ctx.shadowBlur = 25 * glowIntensity;
-      ctx.fillStyle = `rgba(255, 215, 0, ${0.3 * glowIntensity})`;
+      ctx.fillStyle = `rgba(${this.hexToRgb(bonusConfig.glowColor)}, ${0.3 * glowIntensity})`;
       ctx.fillRect(
         screenX - PlinkoEngine.BONUS_PASSAGE_WIDTH/2 - 5,
         screenY - PlinkoEngine.BONUS_PASSAGE_HEIGHT/2 - 5,
@@ -2378,8 +2472,12 @@ export default class PlinkoEngine {
         // Additional check: only trigger bonus if ball is moving downward
         // This prevents false positives when ball bounces off nearby pegs
         if (ball.velocity.y > 0) {
-          console.log('Ball hit bonus passage while moving downward! Auto cash out with bonus multiplier.');
-          this.handleBonusCashOut();
+          // Get the bonus type from the bonus passage
+          const bonusType = (bonusPassage as any).bonusType as BonusType;
+          const bonusConfig = (bonusPassage as any).bonusConfig as BonusConfig;
+          
+          console.log(`Ball hit ${bonusType} bonus passage while moving downward! Auto cash out with ${bonusConfig.multiplier}x multiplier.`);
+          this.handleBonusCashOut(bonusType, bonusConfig);
           break; // Only handle the first collision
         } else {
           console.log('Ball hit bonus passage but was moving upward, ignoring collision.');
@@ -2388,7 +2486,7 @@ export default class PlinkoEngine {
     }
   }
 
-  private handleBonusCashOut() {
+  private handleBonusCashOut(bonusType: BonusType, bonusConfig: BonusConfig) {
     if (!this.isGameInProgress() || !this.trackedBall) {
       console.log('No game in progress, cannot cash out with bonus');
       return;
@@ -2405,7 +2503,7 @@ export default class PlinkoEngine {
 
     // Calculate winnings with bonus multiplier
     const originalMultiplier = parseFloat(this.currentMultiplier.toFixed(2));
-    const bonusMultiplier = originalMultiplier * PlinkoEngine.BONUS_MULTIPLIER; // Double the current multiplier
+    const bonusMultiplier = originalMultiplier * bonusConfig.multiplier; // Double the current multiplier
     const winAmount = ballBetAmount * bonusMultiplier;
     const profit = winAmount - ballBetAmount;
 
