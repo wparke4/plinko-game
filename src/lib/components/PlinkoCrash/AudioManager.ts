@@ -23,6 +23,15 @@ export default class AudioManager {
     { multiplier: 100.0, frequency: 1760, volume: 0.5, filterFreq: 6400 }
   ];
 
+  // Active bonus counting nodes
+  private activeBonusCounting: {
+    osc: OscillatorNode;
+    gain: GainNode;
+    lfo: OscillatorNode;
+    lfoGain: GainNode;
+    filter: BiquadFilterNode;
+  } | null = null;
+
   constructor() {
     this.initializeAudio();
   }
@@ -150,6 +159,85 @@ export default class AudioManager {
       
     } catch (error) {
       console.warn('Failed to play multiplier tone:', error);
+    }
+  }
+
+  // New: play a counting-up sound matching a UI animation duration
+  public playBonusCounting(durationMs: number, fromValue: number, toValue: number) {
+    if (!this.isInitialized || !this.audioContext || !this.masterGainNode || this.isMuted) {
+      return;
+    }
+
+    // Stop any existing counting sound
+    if (this.activeBonusCounting) {
+      try {
+        const now = this.audioContext.currentTime;
+        this.activeBonusCounting.gain.gain.cancelScheduledValues(now);
+        this.activeBonusCounting.gain.gain.setTargetAtTime(0.0001, now, 0.03);
+        this.activeBonusCounting.osc.stop(now + 0.06);
+        this.activeBonusCounting.lfo.stop(now + 0.06);
+      } catch {}
+      this.activeBonusCounting = null;
+    }
+
+    try {
+      const ctx = this.audioContext;
+      const start = ctx.currentTime;
+      const duration = Math.max(0.15, durationMs / 1000);
+
+      // Map multiplier to sound params for start/end
+      const startParams = this.getSoundParameters(fromValue);
+      const endParams = this.getSoundParameters(toValue);
+
+      // Main oscillator and filter
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(startParams.filterFreq, start);
+      filter.Q.setValueAtTime(3, start);
+
+      // Gentle tremolo to evoke counting ticks
+      const lfo = ctx.createOscillator();
+      const lfoGain = ctx.createGain();
+      lfo.type = 'sine';
+      lfo.frequency.setValueAtTime(12, start); // 12 Hz tremolo
+      lfoGain.gain.setValueAtTime(0.4 * (startParams.volume + 0.08), start); // tremolo depth scales with volume
+      lfo.connect(lfoGain);
+      lfoGain.connect(gain.gain);
+
+      // Configure oscillator: warm triangle
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(startParams.frequency, start);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(osc.frequency.value, endParams.frequency), start + duration);
+
+      // Envelope: fade in slightly then sustain and fade out
+      const baseVol = Math.min(0.22, (startParams.volume + endParams.volume) * 0.6);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(baseVol, start + 0.05);
+      gain.gain.setTargetAtTime(baseVol * 0.95, start + 0.06, 0.2);
+      gain.gain.setTargetAtTime(0.0001, start + duration - 0.08, 0.06);
+
+      // Filter brightens slightly over time
+      filter.frequency.linearRampToValueAtTime(endParams.filterFreq, start + duration);
+
+      // Connect graph
+      osc.connect(filter);
+      filter.connect(gain);
+      if (this.masterGainNode) {
+        gain.connect(this.masterGainNode);
+      }
+
+      // Start/stop
+      osc.start(start);
+      lfo.start(start);
+      osc.stop(start + duration + 0.05);
+      lfo.stop(start + duration + 0.05);
+
+      // Track active instance
+      this.activeBonusCounting = { osc, gain, lfo, lfoGain, filter };
+    } catch (error) {
+      console.warn('Failed to play bonus counting sound:', error);
     }
   }
 

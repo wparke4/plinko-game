@@ -3,7 +3,6 @@
   import CircleNotch from 'phosphor-svelte/lib/CircleNotch';
   import type { Action } from 'svelte/action';
   import BinsRow from './BinsRow.svelte';
-  import LastWins from './LastWins.svelte';
   import PlinkoEngine from './PlinkoEngine';
 
   const { WIDTH, HEIGHT } = PlinkoEngine;
@@ -79,7 +78,6 @@
       {/if}
     </div>
   </div>
-  <div class="absolute top-1/2 right-[5%] -translate-y-1/2">
-    <LastWins />
-  </div>
+  
+  <!-- Removed right-side LastWins to turn off multiplier history -->
 </div>

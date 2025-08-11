@@ -3,7 +3,6 @@
   import { plinkoEngine, betAmount, balance, currentMultiplier, gameState, totalProfitHistory, isMultiplierFlashing, winRecords } from '$lib/stores/game';
   import CircleNotch from 'phosphor-svelte/lib/CircleNotch';
   import type { Action } from 'svelte/action';
-  import LastWins from './LastWins.svelte';
   import PlinkoEngine from './PlinkoEngine';
   import Multiplier from './Multiplier.svelte';
 
@@ -110,9 +109,8 @@
       </div>
     </div>
   </div>
-  <div class="absolute top-1/2 right-[5%] -translate-y-1/2">
-    <LastWins />
-  </div>
+  
+  <!-- Removed right-side LastWins to turn off multiplier history -->
 </div>
 
 <style>

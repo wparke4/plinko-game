@@ -1,5 +1,5 @@
 import Matter from 'matter-js';
-import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory, currentMultiplier, gameState } from '$lib/stores/game';
+import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory, currentMultiplier, gameState, bonusDoubling } from '$lib/stores/game';
 import { RiskLevel, type RowCount } from '$lib/types';
 import { get } from 'svelte/store';
 import AudioManager from './AudioManager';
@@ -17,6 +17,7 @@ export default class PlinkoEngine {
   static readonly WALL_CATEGORY = 0x0004;  // New category for walls
   static readonly DEATH_PASSAGE_CATEGORY = 0x0008;  // New category for death passages
   static readonly CASH_OUT_PASSAGE_CATEGORY = 0x0016;  // New category for cash out passages
+  static readonly BONUS_PASSAGE_CATEGORY = 0x0020;  // New category for bonus passages
   static readonly EXPLOSION_CATEGORY = 0x0010;  // New category for explosion particles
   static readonly ROW_HEIGHT = 35; // Reduced from 50 to fit more rows
   static readonly VIEWPORT_BUFFER = 2; // Number of screen heights to keep pins loaded above and below viewport
@@ -26,6 +27,8 @@ export default class PlinkoEngine {
   static readonly DEATH_PASSAGE_HEIGHT = 8; // Height of the horizontal death passage laser
   static readonly CASH_OUT_PASSAGE_WIDTH = 25; // Width of the horizontal cash out passage
   static readonly CASH_OUT_PASSAGE_HEIGHT = 8; // Height of the horizontal cash out passage
+  static readonly BONUS_PASSAGE_WIDTH = 40; // Width of the horizontal bonus passage (much larger)
+  static readonly BONUS_PASSAGE_HEIGHT = 14; // Height of the horizontal bonus passage (much larger)
 
   // Risk-based pin configuration
   private static readonly PINS_PER_ROW_CONFIG = {
@@ -77,6 +80,11 @@ export default class PlinkoEngine {
   private cashOutPassages: Matter.Body[] = [];
   private rowCashOutPassages: Map<number, Matter.Body> = new Map(); // Y position to cash out passage mapping
   
+  // Bonus passage management
+  private bonusPassages: Matter.Body[] = [];
+  private rowBonusPassages: Map<number, Matter.Body> = new Map(); // Y position to bonus passage mapping
+  private bonusBlockRowMap: Map<number, number> = new Map(); // blockIndex (8-row blocks) -> chosen bonus rowIndex within that block
+  
   // Camera tracking properties
   private cameraY: number = 0;
   private highestCameraY: number = 0; // Track the highest (smallest) Y position
@@ -124,6 +132,12 @@ export default class PlinkoEngine {
   // Progressive spacing configuration
   static readonly SPACING_INCREASE_PER_ROW = 0.005; // 3% increase per row
   static readonly MAX_SPACING_MULTIPLIER = 1.5; // Maximum 100% increase (2x original)
+
+  // Bonus feature configuration
+  static readonly BONUS_ENABLED = true; // Toggle to enable/disable bonus passages
+  static readonly BONUS_TESTING_MODE = true; // Testing mode: first 10 rows get bonus passages
+  static readonly BONUS_ROWS_INTERVAL = 10; // Place bonus every X rows
+  static readonly BONUS_MULTIPLIER = 2.0; // Multiplier applied to current multiplier when hitting bonus
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -190,12 +204,14 @@ export default class PlinkoEngine {
       this.handleBallWrapping();
       this.updateExplosionParticles();
       this.updateCashOutCelebration();
+      this.updateBonusPassageEffects();
     });
 
-    // Setup collision detection for death passages and cash out passages
+    // Setup collision detection for death passages, cash out passages, and bonus passages
     Matter.Events.on(this.engine, 'collisionStart', (event) => {
       this.handleDeathPassageCollision(event);
       this.handleCashOutPassageCollision(event);
+      this.handleBonusPassageCollision(event);
     });
   }
 
@@ -335,9 +351,15 @@ export default class PlinkoEngine {
       Matter.Composite.remove(this.engine.world, this.cashOutPassages);
       this.cashOutPassages = [];
     }
+    if (this.bonusPassages.length > 0) {
+      Matter.Composite.remove(this.engine.world, this.bonusPassages);
+      this.bonusPassages = [];
+    }
     this.rowPinPositions.clear();
     this.rowDeathPassages.clear();
     this.rowCashOutPassages.clear();
+    this.rowBonusPassages.clear();
+    this.bonusBlockRowMap.clear();
     
     // Clear preview passages
     this.clearAllPreviewPassages();
@@ -388,7 +410,10 @@ export default class PlinkoEngine {
     // If game is in progress, create actual passages instead of preview passages
     if (this.isGameInProgress()) {
       const isDeathRow = (rowIndex + 1) % 2 === 0;
-      if (isDeathRow) {
+      
+      if (!isDeathRow && this.shouldPlaceBonusPassage(rowIndex)) {
+        this.createBonusPassage(rowY, isOffset, rowIndex);
+      } else if (isDeathRow) {
         this.createDeathPassage(rowY, isOffset);
       } else {
         this.createCashOutPassage(rowY, isOffset);
@@ -532,6 +557,217 @@ export default class PlinkoEngine {
     Matter.Composite.add(this.engine.world, cashOutPassage);
   }
 
+  private shouldPlaceBonusPassage(rowIndex: number): boolean {
+    // Only place bonus passages if the feature is enabled
+    if (!PlinkoEngine.BONUS_ENABLED) {
+      return false;
+    }
+
+    // Testing mode: first 10 rows all get bonus passages (except death rows)
+    if (PlinkoEngine.BONUS_TESTING_MODE) {
+      return this.shouldPlaceBonusPassageTestingMode(rowIndex);
+    }
+
+    // NORMAL MODE RULES:
+    // - Never in first 8 rows (row indices 0..7)
+    // - Only on rows that would be GREEN (cash-out), never on death rows
+    // - After row 8, place exactly one bonus per 8-row block: 9..16, 17..24, etc.
+
+    if (rowIndex < 8) return false;
+
+    // Determine if this row is a death row (even index + 1 divisible by 2)
+    const isDeathRow = (rowIndex + 1) % 2 === 0;
+    if (isDeathRow) return false;
+
+    // Compute 8-row block index using 1-based rows then converting back:
+    // rows 9..16 => blockIndex=1, rows 17..24 => blockIndex=2, etc.
+    const oneBasedRow = rowIndex + 1;
+    const blockIndex = Math.floor((oneBasedRow - 1) / 8); // 1 for 9..16, 2 for 17..24
+
+    // Ensure we only choose one specific rowIndex per block, picked randomly among valid GREEN rows in that block
+    if (!this.bonusBlockRowMap.has(blockIndex)) {
+      // Determine candidate GREEN rows in this block
+      const blockStartRow = (blockIndex * 8) + 1; // 1-based start
+      const blockEndRow = blockStartRow + 7;      // inclusive
+
+      const candidates: number[] = [];
+      for (let r = blockStartRow; r <= blockEndRow; r++) {
+        const rZeroBased = r - 1;
+        const rIsDeathRow = (rZeroBased + 1) % 2 === 0;
+        if (!rIsDeathRow && rZeroBased >= 8) {
+          candidates.push(rZeroBased);
+        }
+      }
+
+      if (candidates.length > 0) {
+        const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+        this.bonusBlockRowMap.set(blockIndex, chosen);
+        console.log(`🎰 Assigned bonus row ${chosen} for block ${blockIndex} (rows ${blockStartRow}-${blockEndRow})`);
+      }
+    }
+
+    // Place bonus only if this row is the chosen one for its block
+    const chosenForBlock = this.bonusBlockRowMap.get(blockIndex);
+    return chosenForBlock === rowIndex;
+  }
+
+  private shouldPlaceBonusPassageTestingMode(rowIndex: number): boolean {
+    // TESTING MODE RULES:
+    // - Place bonus on first 10 rows (row indices 0..9)
+    // - Only on rows that would be GREEN (cash-out), never on death rows
+    
+    if (rowIndex >= 10) return false;
+
+    // Determine if this row is a death row (even index + 1 divisible by 2)
+    const isDeathRow = (rowIndex + 1) % 2 === 0;
+    if (isDeathRow) return false;
+
+    console.log(`🎰 Testing mode: placing bonus on row ${rowIndex}`);
+    return true;
+  }
+
+  private createBonusPassage(rowY: number, isOffset: boolean, rowIndex: number) {
+    const { BONUS_PASSAGE_CATEGORY, BALL_CATEGORY, BONUS_PASSAGE_WIDTH, BONUS_PASSAGE_HEIGHT, REFERENCE_PIN_SPACING } = PlinkoEngine;
+    
+    // Use fixed pin spacing and dynamic padding
+    const pinSpacing = REFERENCE_PIN_SPACING;
+    const paddingX = this.currentGameAreaPaddingX;
+    
+    // Calculate number of passages (spaces between pins)
+    const numPassages = isOffset ? this.currentPinsPerRow - 2 : this.currentPinsPerRow - 1;
+    
+    // Randomly select a passage index for the bonus
+    const bonusPassageIndex = Math.floor(Math.random() * numPassages);
+    
+    // Calculate the X position of the bonus passage
+    let passageX: number;
+    if (isOffset) {
+      // For offset rows, passages are between offset pins
+      passageX = paddingX + (pinSpacing / 2) + (bonusPassageIndex * pinSpacing) + (pinSpacing / 2);
+    } else {
+      // For normal rows, passages are between regular pins
+      passageX = paddingX + (bonusPassageIndex * pinSpacing) + (pinSpacing / 2);
+    }
+    
+    // Create the bonus passage body (horizontal laser) - positioned at the same level as the pegs
+    const bonusPassage = Matter.Bodies.rectangle(
+      passageX,
+      rowY,
+      BONUS_PASSAGE_WIDTH,
+      BONUS_PASSAGE_HEIGHT,
+      {
+        isStatic: true,
+        isSensor: true, // Make it a sensor so balls pass through but we can detect collision
+        render: {
+          fillStyle: '#FFD700', // Bright golden color
+          strokeStyle: '#FF6B00', // Bright orange stroke
+          lineWidth: 4, // Thicker stroke
+        },
+        collisionFilter: {
+          category: BONUS_PASSAGE_CATEGORY,
+          mask: BALL_CATEGORY,
+        },
+      }
+    );
+    
+    // Add a special property to identify this as a bonus passage for custom rendering
+    (bonusPassage as any).isBonusPassage = true;
+    (bonusPassage as any).bonusCreationTime = Date.now();
+    
+    this.bonusPassages.push(bonusPassage);
+    this.rowBonusPassages.set(rowY, bonusPassage);
+    Matter.Composite.add(this.engine.world, bonusPassage);
+    
+    console.log(`💰 CREATED BONUS PASSAGE: Row ${rowIndex}, Y: ${rowY.toFixed(1)}, X: ${passageX.toFixed(1)} - Look for golden "x2" passage!`);
+  }
+
+  private renderBonusPassageTexts() {
+    if (!this.render.context || this.bonusPassages.length === 0) {
+      return;
+    }
+
+    const ctx = this.render.context;
+    const currentTime = Date.now();
+    
+    // Save context state
+    ctx.save();
+    
+    for (const bonusPassage of this.bonusPassages) {
+      if (!(bonusPassage as any).isBonusPassage) continue;
+      
+      // Get screen coordinates (account for camera position)
+      const screenX = bonusPassage.position.x;
+      const screenY = bonusPassage.position.y - this.cameraY;
+      
+      // Only render if on screen
+      if (screenY < -50 || screenY > PlinkoEngine.HEIGHT + 50) {
+        continue;
+      }
+      
+      // Create pulsing effect
+      const creationTime = (bonusPassage as any).bonusCreationTime || currentTime;
+      const pulseTime = (currentTime - creationTime) * 0.003; // Slower pulse
+      const pulse = Math.sin(pulseTime) * 0.3 + 0.7; // 0.4 to 1.0
+      
+      // Enhanced glow effect
+      const glowIntensity = pulse;
+      ctx.shadowColor = '#FFD700';
+      ctx.shadowBlur = 15 * glowIntensity;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      
+      // Draw the "x2" text
+      ctx.fillStyle = '#FFFFFF';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 4;
+      ctx.font = 'bold 18px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // Draw text with outline for better visibility
+      ctx.strokeText('x2', screenX, screenY);
+      ctx.fillText('x2', screenX, screenY);
+      
+      // Draw additional glow around the passage
+      ctx.shadowBlur = 25 * glowIntensity;
+      ctx.fillStyle = `rgba(255, 215, 0, ${0.3 * glowIntensity})`;
+      ctx.fillRect(
+        screenX - PlinkoEngine.BONUS_PASSAGE_WIDTH/2 - 5,
+        screenY - PlinkoEngine.BONUS_PASSAGE_HEIGHT/2 - 5,
+        PlinkoEngine.BONUS_PASSAGE_WIDTH + 10,
+        PlinkoEngine.BONUS_PASSAGE_HEIGHT + 10
+      );
+    }
+    
+    // Restore context state
+    ctx.restore();
+  }
+
+  private updateBonusPassageEffects() {
+    if (this.bonusPassages.length === 0) return;
+
+    const currentTime = Date.now();
+    
+    for (const bonusPassage of this.bonusPassages) {
+      if (!(bonusPassage as any).isBonusPassage || !bonusPassage.render) continue;
+      
+      const creationTime = (bonusPassage as any).bonusCreationTime || currentTime;
+      const pulseTime = (currentTime - creationTime) * 0.005; // Medium pulse speed
+      const pulse = Math.sin(pulseTime) * 0.4 + 0.6; // 0.2 to 1.0
+      
+      // Update the fill style with pulsing brightness
+      const goldIntensity = Math.floor(200 + (pulse * 55)); // 200 to 255
+      bonusPassage.render.fillStyle = `rgb(${goldIntensity}, ${Math.floor(goldIntensity * 0.84)}, 0)`;
+      
+      // Update stroke with pulsing orange
+      const orangeIntensity = Math.floor(150 + (pulse * 105)); // 150 to 255
+      bonusPassage.render.strokeStyle = `rgb(${orangeIntensity}, ${Math.floor(orangeIntensity * 0.42)}, 0)`;
+      
+      // Vary stroke width slightly
+      bonusPassage.render.lineWidth = 3 + (pulse * 2); // 3 to 5
+    }
+  }
+
   private createPreviewPassages(rowY: number, isOffset: boolean, rowIndex: number) {
     const { REFERENCE_PIN_SPACING, DEATH_PASSAGE_WIDTH, DEATH_PASSAGE_HEIGHT } = PlinkoEngine;
     
@@ -542,11 +778,12 @@ export default class PlinkoEngine {
     // Calculate number of passages (spaces between pins)
     const numPassages = isOffset ? this.currentPinsPerRow - 2 : this.currentPinsPerRow - 1;
     
-    // Determine if this is a death row or cash out row
+        // Determine if this is a death row or cash out row (ignore bonus for previews - keep it a surprise!)
     const isDeathRow = (rowIndex + 1) % 2 === 0;
     const rowPreviewPassages: Matter.Body[] = [];
     
     // Create preview passages for all possible positions in this row
+    // Always show normal red/green previews, even if bonus will replace them in actual game
     for (let i = 0; i < numPassages; i++) {
       // Calculate the X position of this passage
       let passageX: number;
@@ -556,17 +793,17 @@ export default class PlinkoEngine {
         passageX = paddingX + (i * pinSpacing) + (pinSpacing / 2);
       }
       
-      // Create the preview passage with initial opacity
+      // Create the preview passage with initial opacity - always use normal red/green colors
       const previewPassage = Matter.Bodies.rectangle(
         passageX,
         rowY,
-        DEATH_PASSAGE_WIDTH, // Use same size for both types
+        DEATH_PASSAGE_WIDTH, // Always use normal size for previews
         DEATH_PASSAGE_HEIGHT,
         {
           isStatic: true,
           isSensor: true,
           render: {
-            fillStyle: isDeathRow ? 'rgba(239, 68, 68, 0.5)' : 'rgba(163, 230, 53, 0.5)', // Semi-transparent red or green
+            fillStyle: isDeathRow ? 'rgba(239, 68, 68, 0.5)' : 'rgba(163, 230, 53, 0.5)', // Only red or green
             strokeStyle: isDeathRow ? 'rgba(239, 68, 68, 0.8)' : 'rgba(163, 230, 53, 0.8)',
             lineWidth: 2,
           },
@@ -667,7 +904,7 @@ export default class PlinkoEngine {
         finalOpacity = targetOpacity * 0.15;
       }
       
-      // Update the passage color with calculated opacity
+      // Update the passage color with calculated opacity (only red/green for previews)
       if (isDeathRow) {
         passage.render.fillStyle = `rgba(239, 68, 68, ${finalOpacity})`;
         passage.render.strokeStyle = `rgba(239, 68, 68, ${Math.min(finalOpacity + 0.2, 1)})`;
@@ -1450,6 +1687,10 @@ export default class PlinkoEngine {
 
     // Clean up particle lifecycle data
     this.particleLifecycleData.clear();
+    
+    // Clean up bonus passage tracking
+    this.rowBonusPassages.clear();
+    this.bonusBlockRowMap.clear();
 
     // Reset render background
     if (this.render.options) {
@@ -1570,6 +1811,9 @@ export default class PlinkoEngine {
     // Render the current state (interpolation could be added here for smoother visuals)
     Matter.Render.world(this.render);
     
+    // Custom rendering for bonus passages
+    this.renderBonusPassageTexts();
+    
     // Schedule next frame
     this.animationFrameId = requestAnimationFrame(() => this.startFixedTimestepLoop());
   }
@@ -1580,8 +1824,8 @@ export default class PlinkoEngine {
     // Get the ball's vertical position
     const ballY = this.trackedBall.position.y;
 
-    // Update multiplier based on rows passed
-    if (this.startingRowY !== null) {
+    // Update multiplier based on rows passed (but not during cash out celebration)
+    if (this.startingRowY !== null && !this.isCashOutCelebrating) {
       // Calculate rows passed using the new progressive spacing system
       const currentRowIndex = this.getRowIndexFromY(ballY);
       const startingRowIndex = this.getRowIndexFromY(this.startingRowY);
@@ -1711,6 +1955,14 @@ export default class PlinkoEngine {
           this.rowCashOutPassages.delete(rowY);
         }
         
+        // Also clean up bonus passage for this row
+        const bonusPassage = this.rowBonusPassages.get(rowY);
+        if (bonusPassage) {
+          Matter.Composite.remove(this.engine.world, bonusPassage);
+          this.bonusPassages = this.bonusPassages.filter(bp => bp !== bonusPassage);
+          this.rowBonusPassages.delete(rowY);
+        }
+        
         // Also clean up preview passages for this row
         const previewPassages = this.rowPreviewPassages.get(rowY);
         if (previewPassages) {
@@ -1798,6 +2050,8 @@ export default class PlinkoEngine {
     }
 
     console.log('Dropping ball...');
+    console.log(`🧪 TESTING MODE: First 10 GREEN rows will become SURPRISE GOLDEN BONUS "x2" passages!`);
+    console.log(`🎰 Bonus system is ${PlinkoEngine.BONUS_ENABLED ? 'ENABLED' : 'DISABLED'} - Golden passages are surprise only!`);
 
     // Play ball drop sound and unlock audio context if needed
     this.audioManager.unlockAudio(); // This will unlock audio on first user interaction
@@ -1832,7 +2086,7 @@ export default class PlinkoEngine {
         density: 0.8,
         collisionFilter: {
           category: PlinkoEngine.BALL_CATEGORY,
-          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY | PlinkoEngine.DEATH_PASSAGE_CATEGORY | PlinkoEngine.CASH_OUT_PASSAGE_CATEGORY,
+          mask: PlinkoEngine.PIN_CATEGORY | PlinkoEngine.WALL_CATEGORY | PlinkoEngine.DEATH_PASSAGE_CATEGORY | PlinkoEngine.CASH_OUT_PASSAGE_CATEGORY | PlinkoEngine.BONUS_PASSAGE_CATEGORY,
         },
         render: {
           fillStyle: '#A3E635',
@@ -1906,8 +2160,10 @@ export default class PlinkoEngine {
         this.previewPassages = this.previewPassages.filter(p => !previewPassages.includes(p));
       }
       
-      // Create actual passage for this row
-      if (isDeathRow) {
+      // Create actual passage for this row based on distribution rules
+      if (!isDeathRow && this.shouldPlaceBonusPassage(rowIndex)) {
+        this.createBonusPassage(rowY, isOffset, rowIndex);
+      } else if (isDeathRow) {
         this.createDeathPassage(rowY, isOffset);
       } else {
         this.createCashOutPassage(rowY, isOffset);
@@ -2097,6 +2353,131 @@ export default class PlinkoEngine {
     }
   }
 
+  private handleBonusPassageCollision(event: Matter.IEventCollision<Matter.Engine>) {
+    const pairs = event.pairs;
+    
+    for (const pair of pairs) {
+      const { bodyA, bodyB } = pair;
+      
+      // Check if one body is a ball and the other is a bonus passage
+      let ball: Matter.Body | null = null;
+      let bonusPassage: Matter.Body | null = null;
+      
+      if (bodyA.collisionFilter.category === PlinkoEngine.BALL_CATEGORY && 
+          bodyB.collisionFilter.category === PlinkoEngine.BONUS_PASSAGE_CATEGORY) {
+        ball = bodyA;
+        bonusPassage = bodyB;
+      } else if (bodyB.collisionFilter.category === PlinkoEngine.BALL_CATEGORY && 
+                 bodyA.collisionFilter.category === PlinkoEngine.BONUS_PASSAGE_CATEGORY) {
+        ball = bodyB;
+        bonusPassage = bodyA;
+      }
+      
+      // If we found a ball-bonus passage collision and it's the tracked ball
+      if (ball && bonusPassage && ball === this.trackedBall) {
+        // Additional check: only trigger bonus if ball is moving downward
+        // This prevents false positives when ball bounces off nearby pegs
+        if (ball.velocity.y > 0) {
+          console.log('Ball hit bonus passage while moving downward! Auto cash out with bonus multiplier.');
+          this.handleBonusCashOut();
+          break; // Only handle the first collision
+        } else {
+          console.log('Ball hit bonus passage but was moving upward, ignoring collision.');
+        }
+      }
+    }
+  }
+
+  private handleBonusCashOut() {
+    if (!this.isGameInProgress() || !this.trackedBall) {
+      console.log('No game in progress, cannot cash out with bonus');
+      return;
+    }
+
+    console.log('Processing bonus cash out...');
+
+    // Get the bet amount for this ball
+    const ballBetAmount = this.activeBalls.get(this.trackedBall);
+    if (!ballBetAmount) {
+      console.log('Could not find bet amount for this ball');
+      return;
+    }
+
+    // Calculate winnings with bonus multiplier
+    const originalMultiplier = parseFloat(this.currentMultiplier.toFixed(2));
+    const bonusMultiplier = originalMultiplier * PlinkoEngine.BONUS_MULTIPLIER; // Double the current multiplier
+    const winAmount = ballBetAmount * bonusMultiplier;
+    const profit = winAmount - ballBetAmount;
+
+    console.log('Bonus cash out details:', {
+      betAmount: ballBetAmount,
+      originalMultiplier,
+      bonusMultiplier,
+      winAmount,
+      profit
+    });
+
+    // Update balance with winnings
+    balance.update((b) => b + winAmount);
+
+    // Add to win records
+    winRecords.update((records) => [
+      {
+        id: Date.now().toString(),
+        betAmount: ballBetAmount,
+        rowCount: 16 as RowCount,
+        riskLevel: RiskLevel.MEDIUM,
+        binIndex: -3, // Use -3 to indicate this is a bonus passage cash out
+        payout: {
+          multiplier: bonusMultiplier, // Use the bonus multiplier
+          value: winAmount,
+        },
+        profit,
+      },
+      ...records.slice(0, 9), // Keep only last 10 records
+    ]);
+
+    // Update profit history
+    totalProfitHistory.update((history) => {
+      const newTotal = (history[history.length - 1] || 0) + profit;
+      return [...history, newTotal];
+    });
+
+    // Play special bonus cash out sound (using a higher multiplier for more excitement)
+    this.audioManager.playCashOutSound(bonusMultiplier);
+
+    // Update the current multiplier to the bonus value immediately
+    this.currentMultiplier = bonusMultiplier;
+    currentMultiplier.set(this.currentMultiplier);
+
+    // Signal UI to play a doubling animation from original to bonus multiplier
+    bonusDoubling.set({ from: originalMultiplier, to: bonusMultiplier, startedAt: Date.now() });
+
+    // Play counting-up sound during the on-screen doubling animation (~900ms)
+    this.audioManager.playBonusCounting(900, originalMultiplier, bonusMultiplier);
+
+    // Set celebration state and create spectacular celebration effects
+    this.celebratingBall = this.trackedBall;
+    
+    // Freeze the ball immediately by making it static
+    if (this.celebratingBall) {
+      Matter.Body.setStatic(this.celebratingBall, true);
+      // Also zero out any velocity to ensure it stops completely
+      Matter.Body.setVelocity(this.celebratingBall, { x: 0, y: 0 });
+      
+      // Create enhanced celebration for bonus (could be more spectacular in the future)
+      this.createCashOutCelebration(this.celebratingBall.position.x, this.celebratingBall.position.y);
+    }
+    
+    // Stop camera tracking immediately - game is paused during celebration
+    this.isCameraTracking = false;
+
+    // Update game state for UI reactivity
+    this.updateGameState();
+
+    console.log('Bonus cash out celebration started - ball frozen in place with doubled multiplier!');
+  }
+
   private handleDeathGameOver() {
     if (!this.trackedBall) {
       console.log('No tracked ball, cannot handle death game over');
@@ -2279,6 +2660,12 @@ export default class PlinkoEngine {
       this.celebrationParticles = [];
     }
     
+    // Remove bonus passages if any
+    if (this.bonusPassages.length > 0) {
+      Matter.Composite.remove(this.engine.world, this.bonusPassages);
+      this.bonusPassages = [];
+    }
+    
     // Clean up particle lifecycle data
     this.particleLifecycleData.clear();
     
@@ -2308,6 +2695,9 @@ export default class PlinkoEngine {
     this.currentMultiplier = 0.0;
     currentMultiplier.set(this.currentMultiplier);
     this.startingRowY = null;
+    
+    // Reset bonus doubling store to clear any UI animation state
+    bonusDoubling.set(null);
     
     // Reset camera view to initial position
     Matter.Render.lookAt(this.render, {
