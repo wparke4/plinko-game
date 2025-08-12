@@ -151,7 +151,7 @@ export default class PlinkoEngine {
 
   // Bonus feature configuration
   static readonly BONUS_ENABLED = true; // Toggle to enable/disable bonus passages
-  static readonly BONUS_TESTING_MODE = true; // Testing mode: first 10 rows get bonus passages
+  static readonly BONUS_TESTING_MODE = false; // Testing mode: first 10 rows get bonus passages
   static readonly BONUS_ROWS_INTERVAL = 10; // Place bonus every X rows
   // Bonus configuration with multipliers, spawn rates, and colors
   static readonly BONUS_CONFIGS: Record<BonusType, BonusConfig> = {
