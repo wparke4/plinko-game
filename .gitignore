@@ -12,6 +12,9 @@ vite.config.ts.timestamp-*
 # Local Netlify folder
 .netlify
 
+# Local Vercel folder
+.vercel
+
 # Playwright
 /test-results/
 /playwright-report/
