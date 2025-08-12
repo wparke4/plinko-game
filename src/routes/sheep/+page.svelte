@@ -12,7 +12,8 @@
     { value: 75, label: '75 FPS' },
     { value: 90, label: '90 FPS' },
     { value: 105, label: '105 FPS' },
-    { value: 120, label: '120 FPS' }
+    { value: 120, label: '120 FPS' },
+    { value: 150, label: '150 FPS' }
   ];
   let currentRefreshRate = $state(90);
 
