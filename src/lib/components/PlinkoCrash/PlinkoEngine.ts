@@ -166,17 +166,17 @@ export default class PlinkoEngine {
     [BonusType.X5]: {
       multiplier: 5.0,
       spawnRate: 0.22, // 22%
-      fillStyle: '#8B00FF', // Bright neon purple
-      strokeStyle: '#6A00CC', // Darker purple stroke
-      glowColor: '#8B00FF',
+      fillStyle: '#BB00FF', // Brighter neon purple
+      strokeStyle: '#9900DD', // Brighter purple stroke
+      glowColor: '#BB00FF',
       textColor: '#FFFFFF'
     },
     [BonusType.X10]: {
       multiplier: 10.0,
       spawnRate: 0.12, // 12%
-      fillStyle: '#FF1493', // Bright neon pink
-      strokeStyle: '#E6007E', // Darker pink stroke
-      glowColor: '#FF1493',
+      fillStyle: '#FF00AA', // Brighter neon pink
+      strokeStyle: '#FF0088', // Brighter pink stroke
+      glowColor: '#FF00AA',
       textColor: '#FFFFFF'
     }
   };
@@ -810,13 +810,19 @@ export default class PlinkoEngine {
       // Reset shadow for text rendering
       ctx.shadowBlur = 15 * glowIntensity;
       
-      // Draw the multiplier text (x2, x5, or x10)
+      // Draw the multiplier text (x2, x5, or x10) with enhanced white appearance
       ctx.fillStyle = bonusConfig.textColor;
       ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 5; // Increased stroke thickness for better contrast
       ctx.font = 'bold 18px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      
+      // Clear any shadow effects before drawing text for pure white appearance
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
       
       // Draw text with outline for better visibility
       ctx.strokeText(bonusType, screenX, screenY);
