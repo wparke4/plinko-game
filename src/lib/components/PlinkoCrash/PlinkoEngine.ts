@@ -1,14 +1,16 @@
 import Matter from 'matter-js';
-import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory, currentMultiplier, gameState, bonusDoubling } from '$lib/stores/game';
+import { betAmount, betAmountOfExistingBalls, balance, winRecords, totalProfitHistory, currentMultiplier, gameState, bonusDoubling, bonusGameState } from '$lib/stores/game';
 import { RiskLevel, type RowCount } from '$lib/types';
 import { get } from 'svelte/store';
 import AudioManager from './AudioManager';
+import { goto } from '$app/navigation';
 
 // Bonus type configuration
 enum BonusType {
   X2 = 'x2',
   X5 = 'x5',
-  X10 = 'x10'
+  X10 = 'x10',
+  GOLDEN = 'golden'
 }
 
 interface BonusConfig {
@@ -100,6 +102,7 @@ export default class PlinkoEngine {
   private bonusPassages: Matter.Body[] = [];
   private rowBonusPassages: Map<number, Matter.Body> = new Map(); // Y position to bonus passage mapping
   private bonusBlockRowMap: Map<number, number> = new Map(); // blockIndex (8-row blocks) -> chosen bonus rowIndex within that block
+  private goldenBonusBlockRowMap: Map<number, number> = new Map(); // blockIndex (16-row blocks) -> chosen golden bonus rowIndex within that block
   
   // Camera tracking properties
   private cameraY: number = 0;
@@ -150,9 +153,13 @@ export default class PlinkoEngine {
   static readonly MAX_SPACING_MULTIPLIER = 1.5; // Maximum 100% increase (2x original)
 
   // Bonus feature configuration
-  static readonly BONUS_ENABLED = true; // Toggle to enable/disable bonus passages
+  static readonly BONUS_ENABLED = false; // Toggle to enable/disable bonus passages
   static readonly BONUS_TESTING_MODE = false; // Testing mode: first 10 rows get bonus passages
   static readonly BONUS_ROWS_INTERVAL = 10; // Place bonus every X rows
+  
+  // Golden bonus game configuration
+  static readonly GOLDEN_BONUS_GAME_ENABLED = true; // Toggle to enable/disable golden bonus game
+  static readonly GOLDEN_BONUS_TESTING_MODE = true; // Testing mode: first 10 rows get golden bonus passages
   // Bonus configuration with multipliers, spawn rates, and colors
   static readonly BONUS_CONFIGS: Record<BonusType, BonusConfig> = {
     [BonusType.X2]: {
@@ -178,6 +185,14 @@ export default class PlinkoEngine {
       strokeStyle: '#FF0088', // Brighter pink stroke
       glowColor: '#FF00AA',
       textColor: '#FFFFFF'
+    },
+    [BonusType.GOLDEN]: {
+      multiplier: 1.0, // No multiplier bonus, just triggers bonus game
+      spawnRate: 0.08, // 8% spawn rate for golden bonus game
+      fillStyle: '#FFD700', // Pure golden color
+      strokeStyle: '#FFA500', // Golden orange stroke
+      glowColor: '#FFD700',
+      textColor: '#000000' // Black text for contrast on gold
     }
   };
 
@@ -402,6 +417,7 @@ export default class PlinkoEngine {
     this.rowCashOutPassages.clear();
     this.rowBonusPassages.clear();
     this.bonusBlockRowMap.clear();
+    this.goldenBonusBlockRowMap.clear();
     
     // Clear preview passages
     this.clearAllPreviewPassages();
@@ -454,7 +470,8 @@ export default class PlinkoEngine {
       const isDeathRow = (rowIndex + 1) % 2 === 0;
       
       if (!isDeathRow && this.shouldPlaceBonusPassage(rowIndex)) {
-        this.createBonusPassage(rowY, isOffset, rowIndex);
+        const isGoldenBonus = this.shouldPlaceGoldenBonusPassage(rowIndex);
+        this.createBonusPassage(rowY, isOffset, rowIndex, isGoldenBonus);
       } else if (isDeathRow) {
         this.createDeathPassage(rowY, isOffset);
       } else {
@@ -600,6 +617,10 @@ export default class PlinkoEngine {
   }
 
   private shouldPlaceBonusPassage(rowIndex: number): boolean {
+    return this.shouldPlaceRegularBonusPassage(rowIndex) || this.shouldPlaceGoldenBonusPassage(rowIndex);
+  }
+
+  private shouldPlaceRegularBonusPassage(rowIndex: number): boolean {
     // Only place bonus passages if the feature is enabled
     if (!PlinkoEngine.BONUS_ENABLED) {
       return false;
@@ -653,6 +674,63 @@ export default class PlinkoEngine {
     return chosenForBlock === rowIndex;
   }
 
+  private shouldPlaceGoldenBonusPassage(rowIndex: number): boolean {
+    // Only place golden bonus passages if the feature is enabled
+    if (!PlinkoEngine.GOLDEN_BONUS_GAME_ENABLED) {
+      return false;
+    }
+
+    // Testing mode: first 10 rows all get golden bonus passages (except death rows)
+    if (PlinkoEngine.GOLDEN_BONUS_TESTING_MODE) {
+      return this.shouldPlaceGoldenBonusPassageTestingMode(rowIndex);
+    }
+
+    // NORMAL MODE RULES for golden bonuses:
+    // - Never in first 12 rows (row indices 0..11) - make them rarer than regular bonuses
+    // - Only on rows that would be GREEN (cash-out), never on death rows
+    // - After row 12, place exactly one golden bonus per 16-row block: 13..28, 29..44, etc.
+
+    if (rowIndex < 12) return false;
+
+    // Determine if this row is a death row (even index + 1 divisible by 2)
+    const isDeathRow = (rowIndex + 1) % 2 === 0;
+    if (isDeathRow) return false;
+
+    // Don't place golden bonus if regular bonus is already placed on this row
+    if (this.shouldPlaceRegularBonusPassage(rowIndex)) return false;
+
+    // Compute 16-row block index using 1-based rows then converting back:
+    // rows 13..28 => blockIndex=0, rows 29..44 => blockIndex=1, etc.
+    const oneBasedRow = rowIndex + 1;
+    const blockIndex = Math.floor((oneBasedRow - 13) / 16); // 0 for 13..28, 1 for 29..44
+
+    // Use a separate map for golden bonus blocks to avoid conflicts
+    if (!this.goldenBonusBlockRowMap.has(blockIndex)) {
+      // Determine candidate GREEN rows in this block
+      const blockStartRow = (blockIndex * 16) + 13; // 1-based start
+      const blockEndRow = blockStartRow + 15;        // inclusive
+
+      const candidates: number[] = [];
+      for (let r = blockStartRow; r <= blockEndRow; r++) {
+        const rZeroBased = r - 1;
+        const rIsDeathRow = (rZeroBased + 1) % 2 === 0;
+        if (!rIsDeathRow && rZeroBased >= 12 && !this.shouldPlaceRegularBonusPassage(rZeroBased)) {
+          candidates.push(rZeroBased);
+        }
+      }
+
+      if (candidates.length > 0) {
+        const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+        this.goldenBonusBlockRowMap.set(blockIndex, chosen);
+        console.log(`🏆 Assigned GOLDEN bonus row ${chosen} for block ${blockIndex} (rows ${blockStartRow}-${blockEndRow})`);
+      }
+    }
+
+    // Place golden bonus only if this row is the chosen one for its block
+    const chosenForBlock = this.goldenBonusBlockRowMap.get(blockIndex);
+    return chosenForBlock === rowIndex;
+  }
+
   private shouldPlaceBonusPassageTestingMode(rowIndex: number): boolean {
     // Testing mode: place bonus on rows 1-10
     if (rowIndex >= 1 && rowIndex <= 10) {
@@ -662,6 +740,16 @@ export default class PlinkoEngine {
   
   return false;
 }
+
+  private shouldPlaceGoldenBonusPassageTestingMode(rowIndex: number): boolean {
+    // Testing mode: place golden bonus on rows 1-10
+    if (rowIndex >= 1 && rowIndex <= 10) {
+      console.log(`🏆 Testing mode: placing GOLDEN bonus on row ${rowIndex}`);
+      return true;
+    }
+    
+    return false;
+  }
 
   private selectBonusType(): BonusType {
     const random = Math.random();
@@ -691,11 +779,11 @@ export default class PlinkoEngine {
     return `${r}, ${g}, ${b}`;
   }
 
-  private createBonusPassage(rowY: number, isOffset: boolean, rowIndex: number) {
+  private createBonusPassage(rowY: number, isOffset: boolean, rowIndex: number, isGoldenBonus: boolean = false) {
     const { BONUS_PASSAGE_CATEGORY, BALL_CATEGORY, BONUS_PASSAGE_WIDTH, BONUS_PASSAGE_HEIGHT, REFERENCE_PIN_SPACING } = PlinkoEngine;
     
-    // Select bonus type based on spawn rates
-    const bonusType = this.selectBonusType();
+    // Select bonus type based on spawn rates or force golden if specified
+    const bonusType = isGoldenBonus ? BonusType.GOLDEN : this.selectBonusType();
     const bonusConfig = PlinkoEngine.BONUS_CONFIGS[bonusType];
     
     // Use fixed pin spacing and dynamic padding
@@ -810,23 +898,26 @@ export default class PlinkoEngine {
       // Reset shadow for text rendering
       ctx.shadowBlur = 15 * glowIntensity;
       
-      // Draw the multiplier text (x2, x5, or x10) with enhanced white appearance
+      // Draw the multiplier text (x2, x5, x10, or BONUS for golden) with enhanced appearance
       ctx.fillStyle = bonusConfig.textColor;
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 5; // Increased stroke thickness for better contrast
-      ctx.font = 'bold 18px Arial';
+      ctx.strokeStyle = bonusType === BonusType.GOLDEN ? '#000000' : '#000000';
+      ctx.lineWidth = bonusType === BonusType.GOLDEN ? 3 : 5; // Thinner stroke for golden bonus
+      ctx.font = bonusType === BonusType.GOLDEN ? 'bold 14px Arial' : 'bold 18px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
-      // Clear any shadow effects before drawing text for pure white appearance
+      // Clear any shadow effects before drawing text for pure appearance
       ctx.shadowColor = 'transparent';
       ctx.shadowBlur = 0;
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
       
+      // Determine text to display
+      const displayText = bonusType === BonusType.GOLDEN ? 'BONUS' : bonusType;
+      
       // Draw text with outline for better visibility
-      ctx.strokeText(bonusType, screenX, screenY);
-      ctx.fillText(bonusType, screenX, screenY);
+      ctx.strokeText(displayText, screenX, screenY);
+      ctx.fillText(displayText, screenX, screenY);
       
       // Draw additional glow around the passage using bonus-specific color
       ctx.shadowBlur = 25 * glowIntensity;
@@ -1791,6 +1882,7 @@ export default class PlinkoEngine {
     // Clean up bonus passage tracking
     this.rowBonusPassages.clear();
     this.bonusBlockRowMap.clear();
+    this.goldenBonusBlockRowMap.clear();
 
     // Reset render background
     if (this.render.options) {
@@ -2262,7 +2354,8 @@ export default class PlinkoEngine {
       
       // Create actual passage for this row based on distribution rules
       if (!isDeathRow && this.shouldPlaceBonusPassage(rowIndex)) {
-        this.createBonusPassage(rowY, isOffset, rowIndex);
+        const isGoldenBonus = this.shouldPlaceGoldenBonusPassage(rowIndex);
+        this.createBonusPassage(rowY, isOffset, rowIndex, isGoldenBonus);
       } else if (isDeathRow) {
         this.createDeathPassage(rowY, isOffset);
       } else {
@@ -2482,8 +2575,13 @@ export default class PlinkoEngine {
           const bonusType = (bonusPassage as any).bonusType as BonusType;
           const bonusConfig = (bonusPassage as any).bonusConfig as BonusConfig;
           
-          console.log(`Ball hit ${bonusType} bonus passage while moving downward! Auto cash out with ${bonusConfig.multiplier}x multiplier.`);
-          this.handleBonusCashOut(bonusType, bonusConfig);
+          if (bonusType === BonusType.GOLDEN) {
+            console.log(`Ball hit GOLDEN bonus passage while moving downward! Triggering bonus game.`);
+            this.handleGoldenBonusCollision(bonusType, bonusConfig);
+          } else {
+            console.log(`Ball hit ${bonusType} bonus passage while moving downward! Auto cash out with ${bonusConfig.multiplier}x multiplier.`);
+            this.handleBonusCashOut(bonusType, bonusConfig);
+          }
           break; // Only handle the first collision
         } else {
           console.log('Ball hit bonus passage but was moving upward, ignoring collision.');
@@ -2509,7 +2607,7 @@ export default class PlinkoEngine {
 
     // Calculate winnings with bonus multiplier
     const originalMultiplier = parseFloat(this.currentMultiplier.toFixed(2));
-    const bonusMultiplier = originalMultiplier * bonusConfig.multiplier; // Double the current multiplier
+    const bonusMultiplier = originalMultiplier * bonusConfig.multiplier;
     const winAmount = ballBetAmount * bonusMultiplier;
     const profit = winAmount - ballBetAmount;
 
@@ -2579,7 +2677,136 @@ export default class PlinkoEngine {
     // Update game state for UI reactivity
     this.updateGameState();
 
-    console.log('Bonus cash out celebration started - ball frozen in place with doubled multiplier!');
+    // BONUS GAME TRIGGER: Initialize bonus game state and transition after celebration
+    setTimeout(() => {
+      this.triggerBonusGame(winAmount, bonusConfig.multiplier);
+    }, this.celebrationDuration + 500); // Wait for celebration to finish plus a bit extra
+
+    console.log('Bonus cash out celebration started - will trigger bonus game after celebration!');
+  }
+
+  private handleGoldenBonusCollision(bonusType: BonusType, bonusConfig: BonusConfig) {
+    if (!this.isGameInProgress() || !this.trackedBall) {
+      console.log('No game in progress, cannot trigger golden bonus');
+      return;
+    }
+
+    console.log('Processing golden bonus collision...');
+
+    // Get the bet amount for this ball
+    const ballBetAmount = this.activeBalls.get(this.trackedBall);
+    if (!ballBetAmount) {
+      console.log('Could not find bet amount for this ball');
+      return;
+    }
+
+    // Calculate current winnings without bonus (preserve current multiplier)
+    const currentMultiplier = parseFloat(this.currentMultiplier.toFixed(2));
+    const currentWinAmount = ballBetAmount * currentMultiplier;
+    const currentProfit = currentWinAmount - ballBetAmount;
+
+    console.log('Golden bonus collision details:', {
+      betAmount: ballBetAmount,
+      currentMultiplier,
+      currentWinAmount,
+      currentProfit
+    });
+
+    // Update balance with current winnings
+    balance.update((b) => b + currentWinAmount);
+
+    // Add to win records (showing current multiplier)
+    winRecords.update((records) => [
+      {
+        id: Date.now().toString(),
+        betAmount: ballBetAmount,
+        rowCount: 16 as RowCount,
+        riskLevel: RiskLevel.MEDIUM,
+        binIndex: -4, // Use -4 to indicate this is a golden bonus passage trigger
+        payout: {
+          multiplier: currentMultiplier,
+          value: currentWinAmount,
+        },
+        profit: currentProfit,
+      },
+      ...records.slice(0, 9), // Keep only last 10 records
+    ]);
+
+    // Update profit history
+    totalProfitHistory.update((history) => {
+      const newTotal = (history[history.length - 1] || 0) + currentProfit;
+      return [...history, newTotal];
+    });
+
+    // Play special golden bonus sound
+    this.audioManager.playCashOutSound(currentMultiplier * 2); // Play with elevated excitement
+
+    // Set celebration state and create golden celebration effects
+    this.celebratingBall = this.trackedBall;
+    
+    // Freeze the ball immediately by making it static
+    if (this.celebratingBall) {
+      Matter.Body.setStatic(this.celebratingBall, true);
+      // Also zero out any velocity to ensure it stops completely
+      Matter.Body.setVelocity(this.celebratingBall, { x: 0, y: 0 });
+      
+      // Create enhanced golden celebration
+      this.createCashOutCelebration(this.celebratingBall.position.x, this.celebratingBall.position.y);
+    }
+    
+    // Stop camera tracking immediately - game is paused during celebration
+    this.isCameraTracking = false;
+
+    // Update game state for UI reactivity
+    this.updateGameState();
+
+    // GOLDEN BONUS GAME TRIGGER: Initialize bonus game state and transition after celebration
+    setTimeout(() => {
+      this.triggerGoldenBonusGame(currentWinAmount, currentMultiplier);
+    }, this.celebrationDuration + 500); // Wait for celebration to finish plus a bit extra
+
+    console.log('Golden bonus celebration started - will trigger GOLDEN bonus game after celebration!');
+  }
+
+  private triggerGoldenBonusGame(triggerAmount: number, currentMultiplier: number) {
+    console.log('🏆 TRIGGERING GOLDEN BONUS GAME! 🏆');
+    
+    // Set up bonus game state with golden flag
+    bonusGameState.set({
+      isActive: true,
+      remainingDrops: 5,
+      totalDrops: 5,
+      isTransitioning: true,
+      triggerAmount,
+      bonusMultiplier: currentMultiplier,
+      isGoldenBonus: true // Add flag to indicate this is a golden bonus
+    });
+
+    // Navigate to bonus game after a short delay for transition effect
+    setTimeout(() => {
+      bonusGameState.update(state => ({ ...state, isTransitioning: false }));
+      goto('/bonus');
+    }, 1000);
+  }
+
+  private triggerBonusGame(triggerAmount: number, bonusMultiplier: number) {
+    console.log('🎰 TRIGGERING BONUS GAME! 🎰');
+    
+    // Set up bonus game state
+    bonusGameState.set({
+      isActive: true,
+      remainingDrops: 5,
+      totalDrops: 5,
+      isTransitioning: true,
+      triggerAmount,
+      bonusMultiplier
+    });
+
+    // Navigate to bonus game after a short delay for transition effect
+    setTimeout(() => {
+      bonusGameState.update(state => ({ ...state, isTransitioning: false }));
+      goto('/bonus');
+    }, 1000);
   }
 
   private handleDeathGameOver() {

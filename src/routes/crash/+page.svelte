@@ -2,6 +2,7 @@
   import LiveStatsWindow from '$lib/components/LiveStatsWindow/LiveStatsWindow.svelte';
   import PlinkoSheep from '$lib/components/PlinkoSheep';
   import SettingsWindow from '$lib/components/SettingsWindow';
+  import { BonusGameTransition } from '$lib/components/ui';
 
   import { plinkoEngine, riskLevel, gameState } from '$lib/stores/game';
   import { RiskLevel } from '$lib/types';
@@ -68,6 +69,7 @@
 
   <SettingsWindow />
   <LiveStatsWindow />
+  <BonusGameTransition />
 </div>
 
 <style lang="postcss">

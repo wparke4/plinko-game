@@ -67,9 +67,34 @@ export const gameState = writable<GameState>({
 // Multiplier flash state for cash out celebration feedback
 export const isMultiplierFlashing = writable<boolean>(false);
 
-// New: signal a one-shot bonus doubling animation (Crash mode)
-// When set, UI can animate from `from` to `to` and then clear the store
-export const bonusDoubling = writable<{ from: number; to: number; startedAt: number } | null>(null);
+// Bonus doubling animation state (for showing multiplier increase in real-time)
+export interface BonusDoubling {
+  from: number;
+  to: number;
+  startedAt: number;
+}
+
+export const bonusDoubling = writable<BonusDoubling | null>(null);
+
+// Bonus game state management
+export interface BonusGameState {
+  isActive: boolean;
+  remainingDrops: number;
+  totalDrops: number;
+  isTransitioning: boolean;
+  triggerAmount: number; // The amount that triggered the bonus
+  bonusMultiplier: number; // The multiplier from the bonus passage
+  isGoldenBonus?: boolean; // Flag to indicate if this is a golden bonus game
+}
+
+export const bonusGameState = writable<BonusGameState>({
+  isActive: false,
+  remainingDrops: 0,
+  totalDrops: 5,
+  isTransitioning: false,
+  triggerAmount: 0,
+  bonusMultiplier: 1
+});
 
 /**
  * RGB colors for every bin. The length of the array is the number of bins.

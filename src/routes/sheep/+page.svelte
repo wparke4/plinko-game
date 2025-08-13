@@ -3,7 +3,7 @@
   import PlinkoCrash from '$lib/components/PlinkoCrash';
   import SettingsWindow from '$lib/components/SettingsWindow';
   import AudioControls from '$lib/components/ui/AudioControls.svelte';
-  import { Select } from '$lib/components/ui';
+  import { Select, BonusGameTransition } from '$lib/components/ui';
   import { plinkoEngine } from '$lib/stores/game';
 
   // Refresh rate options for dropdown
@@ -57,6 +57,7 @@
   <SettingsWindow />
   <LiveStatsWindow />
   <AudioControls plinkoEngine={$plinkoEngine} />
+  <BonusGameTransition />
 </div>
 
 <style lang="postcss">
