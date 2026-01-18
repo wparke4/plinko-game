@@ -5,7 +5,8 @@ import { get } from 'svelte/store';
 
 export default class PlinkoEngine {
   static readonly WIDTH = 800;
-  static readonly HEIGHT = 600;
+  static readonly HEIGHT = 600; // Default height, can be overridden for mobile
+  static readonly MOBILE_HEIGHT = 1200; // Taller height for mobile devices
   static readonly BALL_RADIUS = 8;
   static readonly PEG_RADIUS = 4;
   static readonly PADDING_X = 35; // Slightly reduced padding to accommodate more pins
@@ -42,6 +43,9 @@ export default class PlinkoEngine {
   private currentGameAreaWidth: number = 0;
   private currentGameAreaPaddingX: number = 0;
 
+  // Instance-based dimensions (allows mobile to use taller canvas)
+  private readonly instanceHeight: number;
+
   private engine: Matter.Engine;
   private render: Matter.Render;
   private runner: Matter.Runner;
@@ -74,7 +78,10 @@ export default class PlinkoEngine {
   private highestCameraY: number = 0; // Track the highest (smallest) Y position
   private trackedBall: Matter.Body | null = null;
   private isCameraTracking: boolean = false;
-  private readonly CAMERA_MIDPOINT = PlinkoEngine.HEIGHT / 2;
+  // CAMERA_MIDPOINT is calculated as a getter to use instanceHeight
+  private get CAMERA_MIDPOINT(): number {
+    return this.instanceHeight / 2;
+  }
   private currentMultiplier: number = 0;
   private startingRowY: number | null = null;
 
@@ -91,8 +98,10 @@ export default class PlinkoEngine {
   private celebratingBall: Matter.Body | null = null;
   private isCashOutComplete: boolean = false; // New state for when celebration is done but game not reset
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, height?: number) {
     this.canvas = canvas;
+    // Use provided height or default to static HEIGHT
+    this.instanceHeight = height ?? PlinkoEngine.HEIGHT;
     
     // Initialize risk level configuration with fallback
     this.currentRiskLevel = RiskLevel.MEDIUM;
@@ -115,7 +124,7 @@ export default class PlinkoEngine {
       engine: this.engine,
       options: {
         width: PlinkoEngine.WIDTH,
-        height: PlinkoEngine.HEIGHT,
+        height: this.instanceHeight,
         wireframes: false,
         background: '#000000',
         // Enable bounds debugging to see the viewport
@@ -456,7 +465,7 @@ export default class PlinkoEngine {
       // Apply shake to camera bounds
       Matter.Render.lookAt(this.render, {
         min: { x: offsetX, y: this.cameraY + offsetY },
-        max: { x: PlinkoEngine.WIDTH + offsetX, y: this.cameraY + PlinkoEngine.HEIGHT + offsetY }
+        max: { x: PlinkoEngine.WIDTH + offsetX, y: this.cameraY + this.instanceHeight + offsetY }
       });
     }, 16); // ~60fps
   }
@@ -560,7 +569,7 @@ export default class PlinkoEngine {
     const cycleProgress = (progress * flashCycles) % 1;
     const flashIntensity = Math.sin(cycleProgress * Math.PI * 2) * 0.5 + 0.5; // Oscillate between 0 and 1
     
-    // Start with white flash and transition to red
+    // Start with white flash and transition to bright red
     let red, green, blue, alpha;
     
     if (progress < 0.3) {
@@ -568,35 +577,35 @@ export default class PlinkoEngine {
       red = 255;
       green = 255;
       blue = 255;
-      alpha = flashIntensity * 0.9;
+      alpha = 0.5 + flashIntensity * 0.5;
     } else if (progress < 0.7) {
       // Transition to red
       const transitionProgress = (progress - 0.3) / 0.4;
       red = 255;
       green = Math.floor(255 * (1 - transitionProgress));
       blue = Math.floor(255 * (1 - transitionProgress));
-      alpha = flashIntensity * 0.8;
+      alpha = 0.6 + flashIntensity * 0.4;
     } else {
-      // Final red flash before revealing
+      // Final bright red flash before revealing
       red = 255;
-      green = Math.floor(68 * flashIntensity); // Dim red
-      blue = Math.floor(68 * flashIntensity);
-      alpha = flashIntensity * 0.7;
+      green = Math.floor(40 + 40 * flashIntensity); // Brighter red-pink
+      blue = Math.floor(60 + 40 * flashIntensity);
+      alpha = 0.8 + flashIntensity * 0.2;
     }
     
     deathPassage.render.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-    deathPassage.render.strokeStyle = `rgba(${Math.min(255, red + 50)}, ${Math.min(255, green + 50)}, ${Math.min(255, blue + 50)}, ${alpha})`;
-    deathPassage.render.lineWidth = 3;
+    deathPassage.render.strokeStyle = `rgba(255, ${Math.min(255, green + 80)}, ${Math.min(255, blue + 80)}, ${alpha})`;
+    deathPassage.render.lineWidth = 4 + flashIntensity;
   }
 
   private setDeathPassageFinalVisibility(rowY: number) {
     const deathPassage = this.rowDeathPassages.get(rowY);
     if (!deathPassage || !deathPassage.render) return;
     
-    // Set final visible state - bright neon red
-    deathPassage.render.fillStyle = '#ff0044';
-    deathPassage.render.strokeStyle = '#ff6666';
-    deathPassage.render.lineWidth = 3;
+    // Set final visible state - bright glowing neon red
+    deathPassage.render.fillStyle = '#ff2255';
+    deathPassage.render.strokeStyle = '#ff4477';
+    deathPassage.render.lineWidth = 5;
     
     console.log('Death passage revealed for row:', rowY);
   }
@@ -604,6 +613,13 @@ export default class PlinkoEngine {
   start() {
     Matter.Runner.run(this.runner, this.engine);
     Matter.Render.run(this.render);
+    
+    // Set initial camera bounds to show the full canvas height
+    Matter.Render.lookAt(this.render, {
+      min: { x: 0, y: 0 },
+      max: { x: PlinkoEngine.WIDTH, y: this.instanceHeight }
+    });
+    
     this.createReadyBall();
 
     // Initialize game state for UI reactivity
@@ -670,7 +686,7 @@ export default class PlinkoEngine {
     // Update the render offset - allow infinite downward scrolling
     Matter.Render.lookAt(this.render, {
       min: { x: 0, y: this.cameraY },
-      max: { x: PlinkoEngine.WIDTH, y: this.cameraY + PlinkoEngine.HEIGHT }
+      max: { x: PlinkoEngine.WIDTH, y: this.cameraY + this.instanceHeight }
     });
 
     // Generate new rows and clean up old ones
@@ -697,7 +713,8 @@ export default class PlinkoEngine {
   }
 
   private manageDynamicRows() {
-    const { ROW_HEIGHT, HEIGHT, VIEWPORT_BUFFER } = PlinkoEngine;
+    const { ROW_HEIGHT, VIEWPORT_BUFFER } = PlinkoEngine;
+    const HEIGHT = this.instanceHeight;
     
     // Calculate viewport boundaries with buffer
     const viewportTop = this.cameraY - (HEIGHT * VIEWPORT_BUFFER);
@@ -1189,6 +1206,11 @@ export default class PlinkoEngine {
     return parseFloat(this.currentMultiplier.toFixed(2));
   }
 
+  // Add getter for instance height (for responsive canvas sizing)
+  public getInstanceHeight(): number {
+    return this.instanceHeight;
+  }
+
   // Add method to check if game is in progress
   public isGameInProgress(): boolean {
     // Game is only in progress if there's a tracked ball AND we're not in any cash out state
@@ -1270,7 +1292,7 @@ export default class PlinkoEngine {
     // Reset camera view to initial position
     Matter.Render.lookAt(this.render, {
       min: { x: 0, y: 0 },
-      max: { x: PlinkoEngine.WIDTH, y: PlinkoEngine.HEIGHT }
+      max: { x: PlinkoEngine.WIDTH, y: this.instanceHeight }
     });
     
     // Create a new ready ball
@@ -1324,20 +1346,20 @@ export default class PlinkoEngine {
   private updateKillerDeathPassageFlash(currentTime: number) {
     if (!this.killerDeathPassage || !this.killerDeathPassage.render) return;
     
-    // Create dramatic red flashing effect for the killer passage
-    const flashSpeed = 800; // Faster flashing for dramatic effect
+    // Create dramatic bright red flashing effect for the killer passage
+    const flashSpeed = 500; // Faster flashing for dramatic effect
     const cycle = (currentTime / flashSpeed) % 1;
     const intensity = (Math.sin(cycle * Math.PI * 2) * 0.5 + 0.5); // Oscillate between 0 and 1
     
-    // Bright red flashing
+    // Bright glowing red flashing
     const red = 255;
-    const green = Math.floor(intensity * 100); // Some green for variation
-    const blue = Math.floor(intensity * 100); // Some blue for variation
-    const alpha = 0.8 + (intensity * 0.2); // High opacity with slight variation
+    const green = Math.floor(intensity * 50); // Less green for more pure red
+    const blue = Math.floor(intensity * 80); // Slight pink tint
+    const alpha = 1; // Full opacity
     
     this.killerDeathPassage.render.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-    this.killerDeathPassage.render.strokeStyle = `rgba(255, ${Math.floor(intensity * 150)}, ${Math.floor(intensity * 150)}, 1)`;
-    this.killerDeathPassage.render.lineWidth = 4 + (intensity * 2); // Pulsing line width
+    this.killerDeathPassage.render.strokeStyle = `rgba(255, ${Math.floor(100 + intensity * 100)}, ${Math.floor(100 + intensity * 100)}, 1)`;
+    this.killerDeathPassage.render.lineWidth = 6 + (intensity * 3); // Larger pulsing line width
   }
 
   private updateCashOutCelebration() {
@@ -1437,7 +1459,7 @@ export default class PlinkoEngine {
     // Reset camera view to initial position
     Matter.Render.lookAt(this.render, {
       min: { x: 0, y: 0 },
-      max: { x: PlinkoEngine.WIDTH, y: PlinkoEngine.HEIGHT }
+      max: { x: PlinkoEngine.WIDTH, y: this.instanceHeight }
     });
 
     // Create a new ready ball
@@ -1454,7 +1476,7 @@ export default class PlinkoEngine {
     
     // Calculate current viewport bounds
     const viewportTop = this.cameraY;
-    const viewportBottom = this.cameraY + PlinkoEngine.HEIGHT;
+    const viewportBottom = this.cameraY + this.instanceHeight;
     
     // Reveal only death passages that are currently visible on screen
     for (const [rowY, deathPassage] of this.rowDeathPassages.entries()) {
@@ -1494,8 +1516,8 @@ export default class PlinkoEngine {
     }
     
     // Calculate text position in bottom 20% of visible area
-    const bottomAreaHeight = PlinkoEngine.HEIGHT * 0.2; // Bottom 20%
-    const textY = PlinkoEngine.HEIGHT - (bottomAreaHeight / 2); // Center of bottom 20%
+    const bottomAreaHeight = this.instanceHeight * 0.2; // Bottom 20%
+    const textY = this.instanceHeight - (bottomAreaHeight / 2); // Center of bottom 20%
     const textX = PlinkoEngine.WIDTH / 2; // Center horizontally
     
     // Save canvas state

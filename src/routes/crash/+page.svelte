@@ -34,38 +34,26 @@
 
 
 
-<div class="relative flex min-h-dvh w-full flex-col bg-black">
-  <!-- Top Navigation Bar -->
-  <div class="absolute top-2 left-4 right-4 z-10 flex items-center justify-between">
-    <!-- Risk Level Selector -->
+<div class="page-container">
+  <!-- Risk Level Selector - overlaid on top -->
+  <div class="risk-selector">
     <div class="flex flex-col gap-0.5">
-      <label class="text-xs font-medium text-gray-400">Risk Level</label>
-      <div class="flex gap-1 rounded-full bg-gray-950 p-0.5">
+      <label class="text-[10px] sm:text-xs font-medium text-gray-400">Risk Level</label>
+      <div class="flex gap-0.5 sm:gap-1 rounded-full bg-gray-950 p-0.5">
         {#each riskLevels as { value, label }}
           <button
             onclick={() => handleRiskChange(value)}
             disabled={isGameInProgress}
-            class="rounded-full py-1 px-3 text-sm font-medium text-white transition hover:not-disabled:bg-gray-800 active:not-disabled:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50 {$riskLevel === value ? 'bg-gray-800' : ''}"
-            title={isGameInProgress ? 'Cannot change risk level during gameplay' : ''}
+            class="risk-button touch-manipulation rounded-full py-1.5 sm:py-1 px-2 sm:px-3 text-xs sm:text-sm font-medium text-white transition hover:not-disabled:bg-gray-800 active:not-disabled:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50 {$riskLevel === value ? 'bg-gray-800' : ''}"
           >
             {label}
           </button>
         {/each}
       </div>
     </div>
-
-
   </div>
 
-  <div class="flex-1 px-5">
-    <div class="mx-auto mt-3 max-w-xl min-w-[300px] drop-shadow-xl md:mt-6 lg:max-w-7xl">
-      <div class="flex flex-col-reverse overflow-hidden rounded-lg lg:w-full lg:flex-row bg-black">
-        <div class="flex-1">
-          <PlinkoSheep />
-        </div>
-      </div>
-    </div>
-  </div>
+  <PlinkoSheep />
 
   <SettingsWindow />
   <LiveStatsWindow />
@@ -77,5 +65,31 @@
 
   :global(body) {
     @apply bg-black;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .page-container {
+    position: relative;
+  }
+
+  /* Risk selector overlaid at top */
+  .risk-selector {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 10;
+  }
+
+  .risk-button {
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    min-height: 32px;
+  }
+
+  @media (min-width: 640px) {
+    .risk-button {
+      min-height: auto;
+    }
   }
 </style> 
