@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { plinkoEngine, currentMultiplier, totalProfitHistory, isMultiplierFlashing, gameState, winRecords } from '$lib/stores/game';
+  import { plinkoEngine, riskLevel, currentMultiplier, totalProfitHistory, isMultiplierFlashing, gameState, winRecords } from '$lib/stores/game';
+  import { RiskLevel } from '$lib/types';
   import CircleNotch from 'phosphor-svelte/lib/CircleNotch';
   import type { Action } from 'svelte/action';
   import BinsRow from './BinsRow.svelte';
@@ -8,10 +9,19 @@
 
   const { WIDTH, HEIGHT } = PlinkoEngine;
 
+  // Set default risk level to HIGH
+  riskLevel.set(RiskLevel.HIGH);
+
   // Betting UI state
   let betAmount = $state(100);
   let numberOfBalls = $state(1);
   let isDropping = $state(false);
+
+  const riskOptions = [
+    { value: RiskLevel.LOW, label: 'Low' },
+    { value: RiskLevel.MEDIUM, label: 'Medium' },
+    { value: RiskLevel.HIGH, label: 'High' },
+  ];
 
   const initPlinko: Action<HTMLCanvasElement> = (node) => {
     $plinkoEngine = new PlinkoEngine(node);
@@ -43,12 +53,15 @@
     
     isDropping = true;
     
+    // Ensure numberOfBalls is an integer (input fields can return strings)
+    const ballCount = Math.max(1, Math.floor(Number(numberOfBalls)));
+    
     // Drop the specified number of balls with a delay between each
-    for (let i = 0; i < numberOfBalls; i++) {
+    for (let i = 0; i < ballCount; i++) {
       $plinkoEngine.dropBall();
       
       // Add delay between balls (except after the last one)
-      if (i < numberOfBalls - 1) {
+      if (i < ballCount - 1) {
         await new Promise(resolve => setTimeout(resolve, 30));
       }
     }
@@ -67,20 +80,42 @@
 
 <div class="flex h-screen bg-black">
   <!-- Left sidebar: Betting UI (20%) -->
-  <div class="w-1/5 flex flex-col gap-4 p-4 bg-neutral-900 border-r border-neutral-800">
+  <div class="w-1/5 flex flex-col gap-8 p-4 pt-[20vh] bg-neutral-900 border-r border-neutral-800">
     <!-- Amount Section -->
     <div class="flex flex-col gap-2">
       <label for="bet-amount" class="text-sm font-medium text-neutral-400 uppercase tracking-wide">
         Amount
       </label>
-      <input
-        id="bet-amount"
-        type="number"
-        bind:value={betAmount}
-        min="0"
-        step="10"
-        class="w-full rounded-lg bg-neutral-800 border border-neutral-700 px-4 py-3 text-white text-lg font-medium focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors"
-      />
+      <div class="relative">
+        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-neutral-500">$</span>
+        <input
+          id="bet-amount"
+          type="number"
+          bind:value={betAmount}
+          min="0"
+          step="10"
+          class="w-full rounded-lg bg-neutral-800 border border-neutral-700 pl-8 pr-4 py-3 text-white text-lg font-medium focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors"
+        />
+      </div>
+    </div>
+
+    <!-- Risk Section -->
+    <div class="flex flex-col gap-2">
+      <label class="text-sm font-medium text-neutral-400 uppercase tracking-wide">
+        Risk
+      </label>
+      <div class="flex gap-2">
+        {#each riskOptions as option}
+          <button
+            onclick={() => riskLevel.set(option.value)}
+            class="flex-1 py-2 rounded-lg font-medium transition-colors {$riskLevel === option.value 
+              ? 'bg-green-500 text-slate-900' 
+              : 'bg-neutral-800 border border-neutral-700 text-white hover:bg-neutral-700'}"
+          >
+            {option.label}
+          </button>
+        {/each}
+      </div>
     </div>
 
     <!-- Number of Balls Section -->
@@ -126,7 +161,7 @@
 
   <!-- Right side: Game Area (75%) -->
   <div class="relative flex-1 bg-black">
-    <div class="mx-auto flex h-full flex-col px-4 pt-16" style:max-width={`${WIDTH}px`}>
+    <div class="mx-auto flex h-full flex-col px-4 pt-[11vh]" style:max-width={`${WIDTH}px`}>
       <div class="relative w-full" style:aspect-ratio={`${WIDTH} / ${HEIGHT}`}>
         {#if $plinkoEngine === null}
           <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
@@ -146,3 +181,15 @@
     </div>
   </div>
 </div>
+
+<style>
+  /* Hide native number input spinners */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+</style>

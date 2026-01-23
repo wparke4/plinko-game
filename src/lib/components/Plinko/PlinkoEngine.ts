@@ -73,8 +73,8 @@ class PlinkoEngine {
    */
   private pinsLastRowXCoords: number[] = [];
 
-  static WIDTH = 760;
-  static HEIGHT = 570;
+  static WIDTH = 836;
+  static HEIGHT = 627;
 
   private static PADDING_X = 52;
   private static PADDING_TOP = 36;
@@ -193,12 +193,6 @@ class PlinkoEngine {
    * Drops a new ball from the top with a random horizontal offset, and deducts the balance.
    */
   dropBall() {
-    // Prevent dropping another ball if game is already in progress
-    if (this.isGameInProgress()) {
-      console.log('Game already in progress, cannot drop another ball');
-      return;
-    }
-
     const ballOffsetRangeX = this.pinDistanceX * 0.8;
     const ballRadius = this.pinRadius * 2;
     const { friction, frictionAirByRowCount } = PlinkoEngine.ballFrictions;
