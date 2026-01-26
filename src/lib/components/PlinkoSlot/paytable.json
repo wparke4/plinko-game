@@ -1,0 +1,122 @@
+{
+  "version": "1.0.0",
+  "description": "Plinko Slot paytable configuration. Adjust values to control RTP.",
+  
+  "board": {
+    "rows": 12,
+    "ballCount": 10,
+    "maxPegLevel": 10
+  },
+
+  "pegColors": {
+    "0": "#111827",
+    "1": "#6B7280",
+    "2": "#4B6CB7",
+    "3": "#2FA4A9",
+    "4": "#1FAA59",
+    "5": "#A3E635",
+    "6": "#FACC15",
+    "7": "#FB923C",
+    "8": "#DC2626",
+    "9": "#7C3AED",
+    "10": "#F9FAFB"
+  },
+
+  "pegGlow": {
+    "thresholdSoft": 6,
+    "thresholdStrong": 10,
+    "softGlowIntensity": 0.4,
+    "strongGlowIntensity": 1.0
+  },
+
+  "countPayouts": {
+    "description": "Payouts based on how many pegs reach each level threshold. Uses highest achieved tier.",
+    "tiers": [
+      { "id": "tier1", "levelThreshold": 1, "countRequired": 20, "multiplier": 1.2, "name": "Touched" },
+      { "id": "tier2", "levelThreshold": 2, "countRequired": 15, "multiplier": 1.5, "name": "Warm" },
+      { "id": "tier3", "levelThreshold": 3, "countRequired": 12, "multiplier": 2.0, "name": "Hot" },
+      { "id": "tier4", "levelThreshold": 4, "countRequired": 8, "multiplier": 3.0, "name": "Blazing" },
+      { "id": "tier5", "levelThreshold": 5, "countRequired": 6, "multiplier": 5.0, "name": "Inferno" },
+      { "id": "tier6", "levelThreshold": 6, "countRequired": 4, "multiplier": 10.0, "name": "Golden" },
+      { "id": "tier7", "levelThreshold": 7, "countRequired": 3, "multiplier": 15.0, "name": "Amber" },
+      { "id": "tier8", "levelThreshold": 8, "countRequired": 3, "multiplier": 20.0, "name": "Crimson" },
+      { "id": "tier9", "levelThreshold": 9, "countRequired": 2, "multiplier": 50.0, "name": "Royal" },
+      { "id": "tier10", "levelThreshold": 10, "countRequired": 1, "multiplier": 100.0, "name": "Prismatic" }
+    ]
+  },
+
+  "patternPayouts": {
+    "description": "Bonus payouts for special peg patterns. These ADD to count payouts.",
+    "enabled": true,
+    "patterns": [
+      {
+        "id": "diagonal3",
+        "name": "Diagonal Blaze",
+        "description": "3 pegs in a diagonal with level >= 7",
+        "levelThreshold": 7,
+        "multiplier": 5.0
+      },
+      {
+        "id": "hotColumn",
+        "name": "Hot Column",
+        "description": "4 pegs in the same column with level >= 6",
+        "levelThreshold": 6,
+        "countRequired": 4,
+        "multiplier": 8.0
+      },
+      {
+        "id": "crown",
+        "name": "Crown",
+        "description": "V-shape pattern of 5 pegs with level >= 8",
+        "levelThreshold": 8,
+        "multiplier": 25.0
+      },
+      {
+        "id": "fullRow",
+        "name": "Full Row",
+        "description": "An entire row with all pegs >= 5",
+        "levelThreshold": 5,
+        "multiplier": 15.0
+      },
+      {
+        "id": "topTriangle",
+        "name": "Top Triangle",
+        "description": "Top 6 pegs (rows 0-2) all with level >= 6",
+        "levelThreshold": 6,
+        "multiplier": 20.0
+      },
+      {
+        "id": "perfectRun",
+        "name": "Perfect Run",
+        "description": "Every peg hit at least once (all pegs level >= 1)",
+        "levelThreshold": 1,
+        "countRequired": "all",
+        "multiplier": 3.0
+      }
+    ]
+  },
+
+  "payoutMode": {
+    "description": "How count and pattern payouts combine. 'add' = sum both, 'max' = take higher",
+    "mode": "add"
+  },
+
+  "basePayout": {
+    "description": "Minimum payout multiplier (prevents total loss if configured)",
+    "minimum": 0.0
+  },
+
+  "physics": {
+    "ballDropDelayMs": 800,
+    "ballDropJitterX": 15,
+    "restitution": 0.75,
+    "friction": 0.4,
+    "frictionAir": 0.02
+  },
+
+  "targetRTP": {
+    "description": "Target RTP percentage for Monte Carlo validation",
+    "target": 96.5,
+    "tolerance": 1.0
+  }
+}
