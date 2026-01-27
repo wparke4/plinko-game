@@ -552,13 +552,34 @@ export class PlinkoSlotEngine {
     const pinRadius = ((24 - rowCount) / 2) * scale;
     const symbolColor = PlinkoSlotEngine.getSymbolColor(celebration.symbolLevel);
     
+    // Fade-out phase starts at 75% progress
+    const fadeOutStart = 0.75;
+    const isFadingOut = progress > fadeOutStart;
+    
+    // Calculate fade multiplier (1 during main animation, eases to 0 during fade-out)
+    let fadeMult = 1;
+    if (isFadingOut) {
+      const fadeProgress = (progress - fadeOutStart) / (1 - fadeOutStart);
+      // Smooth ease-out curve (cubic)
+      fadeMult = 1 - (fadeProgress * fadeProgress * fadeProgress);
+    }
+    
     // Pulsing effect for SYMBOL ONLY (sine wave) - more dramatic scaling
     const pulseFrequency = 1.3; // pulses per celebration (30% slower)
     const pulsePhase = Math.sin(progress * Math.PI * 2 * pulseFrequency);
-    const symbolPulseScale = 1 + 0.2 * pulsePhase; // 35% scale variation for symbol (30% less)
     
-    // Glow intensity (starts strong, fades slightly, then strong at end)
-    const glowIntensity = 0.6 + 0.4 * Math.sin(progress * Math.PI);
+    // During fade-out, ease the pulse scale back to 1.0
+    const basePulseScale = 1 + 0.2 * pulsePhase;
+    const symbolPulseScale = isFadingOut 
+      ? 1 + (basePulseScale - 1) * fadeMult  // Ease back to 1.0
+      : basePulseScale;
+    
+    // Glow intensity (starts strong, fades slightly, then strong at end) - with fade-out
+    const baseGlowIntensity = 0.6 + 0.4 * Math.sin(progress * Math.PI);
+    const glowIntensity = baseGlowIntensity * fadeMult;
+    
+    // Early exit if fully faded
+    if (fadeMult < 0.01) return;
     
     for (const pegId of celebration.pegIds) {
       const peg = this.pegs.get(pegId);
@@ -566,7 +587,7 @@ export class PlinkoSlotEngine {
       
       ctx.save();
       
-      // Draw outer glow (fixed size, no pulsing)
+      // Draw outer glow (fixed size, no pulsing) - fades out
       const glowRadius = pinRadius * 2.5;
       const gradient = ctx.createRadialGradient(
         peg.x, peg.y, pinRadius * 0.5,
@@ -582,7 +603,7 @@ export class PlinkoSlotEngine {
       ctx.arc(peg.x, peg.y, glowRadius, 0, Math.PI * 2);
       ctx.fill();
       
-      // Draw highlight ring (fixed size, no pulsing)
+      // Draw highlight ring (fixed size, no pulsing) - fades out
       ctx.globalAlpha = 0.8 * glowIntensity;
       ctx.strokeStyle = '#FFFFFF';
       ctx.lineWidth = 3 * scale;
@@ -593,8 +614,16 @@ export class PlinkoSlotEngine {
       // Draw scaled symbol on top - this is what pulses!
       const symbolImg = this.pegSymbols.get(celebration.symbolLevel);
       if (symbolImg && symbolImg.naturalWidth > 0) {
-        // Base size is larger, then apply pulse scaling
-        const baseSize = pinRadius * 2.2; // Larger base size
+        // Normal symbol size (what it should be when not celebrating)
+        const normalSize = pinRadius * 1.8;
+        // Celebration base size is larger
+        const celebrationBaseSize = pinRadius * 2.2;
+        
+        // During fade-out, interpolate base size back to normal
+        const baseSize = isFadingOut 
+          ? normalSize + (celebrationBaseSize - normalSize) * fadeMult
+          : celebrationBaseSize;
+        
         const maxSize = baseSize * symbolPulseScale;
         const aspectRatio = symbolImg.naturalWidth / symbolImg.naturalHeight;
         
@@ -609,14 +638,17 @@ export class PlinkoSlotEngine {
           drawWidth = maxSize * aspectRatio;
         }
         
-        // Draw dark circular backdrop behind the symbol for better visibility
+        // Draw dark circular backdrop behind the symbol for better visibility - fades out
         const backdropRadius = Math.max(drawWidth, drawHeight) * 0.6;
         const backdropGradient = ctx.createRadialGradient(
           peg.x, peg.y, 0,
           peg.x, peg.y, backdropRadius
         );
-        backdropGradient.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
-        backdropGradient.addColorStop(0.7, 'rgba(0, 0, 0, 0.6)');
+        
+        // Backdrop opacity fades out
+        const backdropOpacity = 0.85 * fadeMult;
+        backdropGradient.addColorStop(0, `rgba(0, 0, 0, ${backdropOpacity})`);
+        backdropGradient.addColorStop(0.7, `rgba(0, 0, 0, ${backdropOpacity * 0.7})`);
         backdropGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
         
         ctx.globalAlpha = 1;
