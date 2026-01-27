@@ -22,7 +22,15 @@ import type {
 } from './types';
 import type { ProvablyFairSeed } from '$lib/utils/provablyFair';
 import paytableDefault from './paytable.json';
+
+// SVG symbols for peg levels
 import orangeSvg from '$lib/assets/slot/orange.svg';
+import watermelonSvg from '$lib/assets/slot/watermelon.svg';
+import bearSvg from '$lib/assets/slot/bear.svg';
+import heartSvg from '$lib/assets/slot/heart.svg';
+import starSvg from '$lib/assets/slot/star.svg';
+import gemSvg from '$lib/assets/slot/gem.svg';
+import diamondSvg from '$lib/assets/slot/diamond.svg';
 
 // Collision categories
 const CATEGORY_PIN = 0x0001;
@@ -160,13 +168,30 @@ export class PlinkoSlotEngine {
    * Load SVG symbols for peg levels.
    */
   private loadPegSymbols(): void {
-    // Level 1 symbol: orange
-    const orangeImg = new Image();
-    orangeImg.src = orangeSvg;
-    orangeImg.onload = () => {
-      this.pegSymbols.set(1, orangeImg);
-      this.symbolsLoaded = true;
-    };
+    const symbolSources: [number, string][] = [
+      [1, orangeSvg],
+      [2, watermelonSvg],
+      [3, bearSvg],
+      [4, heartSvg],
+      [5, starSvg],
+      [6, gemSvg],
+      [7, diamondSvg],
+    ];
+    
+    let loadedCount = 0;
+    const totalToLoad = symbolSources.length;
+    
+    for (const [level, src] of symbolSources) {
+      const img = new Image();
+      img.src = src;
+      img.onload = () => {
+        this.pegSymbols.set(level, img);
+        loadedCount++;
+        if (loadedCount === totalToLoad) {
+          this.symbolsLoaded = true;
+        }
+      };
+    }
   }
   
   /**
@@ -204,9 +229,9 @@ export class PlinkoSlotEngine {
     const maxSize = pinRadius * 1.8;
     
     for (const [pegId, peg] of this.pegs) {
-      // Only render symbol for level 1 pegs
-      if (peg.level === 1) {
-        const symbolImg = this.pegSymbols.get(1);
+      // Render symbols for levels 1-7
+      if (peg.level >= 1 && peg.level <= 7) {
+        const symbolImg = this.pegSymbols.get(peg.level);
         if (symbolImg && symbolImg.naturalWidth > 0 && symbolImg.naturalHeight > 0) {
           ctx.save();
           
@@ -688,10 +713,10 @@ export class PlinkoSlotEngine {
 
     const scale = PlinkoSlotEngine.SIZE_SCALE;
     
-    // Level 1: Keep gray color, SVG symbol will be drawn on top
-    // Level 2+: Use colored circles
-    if (level === 1) {
-      // Keep default gray color for level 1 (SVG will be rendered on top)
+    // Levels 1-7: Keep gray color, SVG symbols will be drawn on top
+    // Levels 8+: Use colored circles
+    if (level >= 1 && level <= 7) {
+      // Keep default gray color for symbol levels (SVG will be rendered on top)
       body.render.fillStyle = this.config.pegColors['0'];
       body.render.strokeStyle = undefined;
       body.render.lineWidth = 0;
