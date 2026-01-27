@@ -46,6 +46,8 @@ export interface PlinkoSlotCallbacks {
   onBallExited?: (ballId: number) => void;
   onRunComplete?: (result: PayoutResult) => void;
   onPhaseChange?: (phase: RunState['phase']) => void;
+  onWinCelebration?: (symbolLevel: number, count: number, multiplier: number) => void;
+  onAllCelebrationsComplete?: () => void;
 }
 
 /**
@@ -100,6 +102,41 @@ export class PlinkoSlotEngine {
   // SVG symbol images for peg levels
   private pegSymbols: Map<number, HTMLImageElement> = new Map();
   private symbolsLoaded = false;
+  
+  // Win celebration state
+  private winCelebrations: Array<{
+    symbolLevel: number;
+    pegIds: string[];
+    multiplier: number;
+    startTime: number;
+    duration: number;
+  }> = [];
+  private currentCelebrationIndex = -1;
+  private celebrationStartTime = 0;
+  private static readonly CELEBRATION_DURATION = 1500; // ms per win celebration
+  
+  // Symbol payouts (multipliers based on count) - min 3 to win
+  private static readonly SYMBOL_PAYOUTS: Record<number, Record<number, number>> = {
+    // level: { count: multiplier }
+    1: { 3: 0.5, 4: 1, 5: 2, 6: 4, 7: 8, 8: 16 },       // Orange (most common)
+    2: { 3: 0.75, 4: 1.5, 5: 3, 6: 6, 7: 12, 8: 24 },   // Watermelon
+    3: { 3: 1, 4: 2, 5: 4, 6: 8, 7: 16, 8: 32 },        // Bear
+    4: { 3: 1.5, 4: 3, 5: 6, 6: 12, 7: 24, 8: 48 },     // Heart
+    5: { 3: 2, 4: 4, 5: 8, 6: 16, 7: 32, 8: 64 },       // Star
+    6: { 3: 3, 4: 6, 5: 12, 6: 24, 7: 48, 8: 96 },      // Gem
+    7: { 3: 5, 4: 10, 5: 20, 6: 40, 7: 80, 8: 160 },    // Diamond (most valuable)
+  };
+  
+  // Symbol colors for celebration glow
+  private static readonly SYMBOL_COLORS: Record<number, string> = {
+    1: '#FF8C00', // Orange
+    2: '#FF6B6B', // Watermelon (red/pink)
+    3: '#8B4513', // Bear (brown)
+    4: '#FF1493', // Heart (pink)
+    5: '#FFD700', // Star (gold)
+    6: '#00CED1', // Gem (cyan)
+    7: '#E0E0FF', // Diamond (white/blue)
+  };
   
   // First peg ID (top row, middle) - stays gray
   private static readonly FIRST_PEG_ID = '0-1';
@@ -211,7 +248,190 @@ export class PlinkoSlotEngine {
     // Use afterRender to draw SVG symbols on top of pegs
     Matter.Events.on(this.render, 'afterRender', () => {
       this.renderPegSymbols();
+      this.renderWinCelebrations();
     });
+  }
+  
+  /**
+   * Detect all winning symbol combinations (3+ matching symbols).
+   */
+  private detectWins(): Array<{ symbolLevel: number; pegIds: string[]; multiplier: number }> {
+    const wins: Array<{ symbolLevel: number; pegIds: string[]; multiplier: number }> = [];
+    
+    // Count pegs at each symbol level (1-7)
+    const symbolPegs: Map<number, string[]> = new Map();
+    
+    for (const [pegId, peg] of this.pegs) {
+      if (peg.level >= 1 && peg.level <= 7) {
+        if (!symbolPegs.has(peg.level)) {
+          symbolPegs.set(peg.level, []);
+        }
+        symbolPegs.get(peg.level)!.push(pegId);
+      }
+    }
+    
+    // Check for wins (3+ of same symbol)
+    for (const [level, pegIds] of symbolPegs) {
+      const count = pegIds.length;
+      if (count >= 3) {
+        const payoutTable = PlinkoSlotEngine.SYMBOL_PAYOUTS[level];
+        // Get the multiplier for this count (cap at max defined)
+        const maxCount = Math.min(count, 8);
+        const multiplier = payoutTable[maxCount] ?? payoutTable[8] ?? 0;
+        
+        if (multiplier > 0) {
+          wins.push({ symbolLevel: level, pegIds, multiplier });
+        }
+      }
+    }
+    
+    // Sort by multiplier (ascending) - least valuable first
+    wins.sort((a, b) => a.multiplier - b.multiplier);
+    
+    return wins;
+  }
+  
+  /**
+   * Start the win celebration sequence.
+   */
+  private startWinCelebrations(): void {
+    const wins = this.detectWins();
+    
+    if (wins.length === 0) {
+      // No wins, complete immediately
+      this.callbacks.onAllCelebrationsComplete?.();
+      return;
+    }
+    
+    // Convert to celebration objects
+    this.winCelebrations = wins.map(win => ({
+      symbolLevel: win.symbolLevel,
+      pegIds: win.pegIds,
+      multiplier: win.multiplier,
+      startTime: 0, // Will be set when celebration starts
+      duration: PlinkoSlotEngine.CELEBRATION_DURATION,
+    }));
+    
+    // Start first celebration
+    this.currentCelebrationIndex = 0;
+    this.startNextCelebration();
+  }
+  
+  /**
+   * Start the next celebration in the sequence.
+   */
+  private startNextCelebration(): void {
+    if (this.currentCelebrationIndex >= this.winCelebrations.length) {
+      // All celebrations complete
+      this.currentCelebrationIndex = -1;
+      this.callbacks.onAllCelebrationsComplete?.();
+      return;
+    }
+    
+    const celebration = this.winCelebrations[this.currentCelebrationIndex];
+    celebration.startTime = Date.now();
+    this.celebrationStartTime = celebration.startTime;
+    
+    // Notify callback
+    this.callbacks.onWinCelebration?.(
+      celebration.symbolLevel,
+      celebration.pegIds.length,
+      celebration.multiplier
+    );
+    
+    // Schedule next celebration
+    setTimeout(() => {
+      this.currentCelebrationIndex++;
+      this.startNextCelebration();
+    }, celebration.duration + 300); // Small gap between celebrations
+  }
+  
+  /**
+   * Render win celebration effects (pulsing, glowing symbols).
+   */
+  private renderWinCelebrations(): void {
+    if (this.currentCelebrationIndex < 0 || this.currentCelebrationIndex >= this.winCelebrations.length) {
+      return;
+    }
+    
+    const celebration = this.winCelebrations[this.currentCelebrationIndex];
+    const now = Date.now();
+    const elapsed = now - celebration.startTime;
+    const progress = Math.min(elapsed / celebration.duration, 1);
+    
+    const ctx = this.ctx;
+    const scale = PlinkoSlotEngine.SIZE_SCALE;
+    const rowCount = this.config.board.rows;
+    const pinRadius = ((24 - rowCount) / 2) * scale;
+    const symbolColor = PlinkoSlotEngine.SYMBOL_COLORS[celebration.symbolLevel] ?? '#FFFFFF';
+    
+    // Pulsing effect (sine wave)
+    const pulseFrequency = 3; // pulses per celebration
+    const pulsePhase = Math.sin(progress * Math.PI * 2 * pulseFrequency);
+    const pulseScale = 1 + 0.15 * pulsePhase; // 15% scale variation
+    
+    // Glow intensity (starts strong, fades slightly, then strong at end)
+    const glowIntensity = 0.6 + 0.4 * Math.sin(progress * Math.PI);
+    
+    for (const pegId of celebration.pegIds) {
+      const peg = this.pegs.get(pegId);
+      if (!peg) continue;
+      
+      ctx.save();
+      
+      // Draw outer glow
+      const glowRadius = pinRadius * 2.5 * pulseScale;
+      const gradient = ctx.createRadialGradient(
+        peg.x, peg.y, pinRadius * 0.5,
+        peg.x, peg.y, glowRadius
+      );
+      gradient.addColorStop(0, symbolColor);
+      gradient.addColorStop(0.4, symbolColor + '80'); // 50% alpha
+      gradient.addColorStop(1, symbolColor + '00'); // 0% alpha
+      
+      ctx.globalAlpha = glowIntensity;
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(peg.x, peg.y, glowRadius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw highlight ring
+      ctx.globalAlpha = 0.8 * glowIntensity;
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 3 * scale * pulseScale;
+      ctx.beginPath();
+      ctx.arc(peg.x, peg.y, pinRadius * 1.3 * pulseScale, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Draw scaled symbol on top
+      const symbolImg = this.pegSymbols.get(celebration.symbolLevel);
+      if (symbolImg && symbolImg.naturalWidth > 0) {
+        const maxSize = pinRadius * 1.8 * pulseScale;
+        const aspectRatio = symbolImg.naturalWidth / symbolImg.naturalHeight;
+        
+        let drawWidth: number;
+        let drawHeight: number;
+        
+        if (aspectRatio > 1) {
+          drawWidth = maxSize;
+          drawHeight = maxSize / aspectRatio;
+        } else {
+          drawHeight = maxSize;
+          drawWidth = maxSize * aspectRatio;
+        }
+        
+        ctx.globalAlpha = 1;
+        ctx.drawImage(
+          symbolImg,
+          peg.x - drawWidth / 2,
+          peg.y - drawHeight / 2,
+          drawWidth,
+          drawHeight
+        );
+      }
+      
+      ctx.restore();
+    }
   }
   
   /**
@@ -922,10 +1142,13 @@ export class PlinkoSlotEngine {
       this.replayLog.payoutResult = payoutResult;
     }
 
-    this.setPhase('complete');
+    // Start win celebrations (will call onAllCelebrationsComplete when done)
+    this.startWinCelebrations();
 
-    // Callback
+    // Callback for run complete (UI can update balance, etc.)
     this.callbacks.onRunComplete?.(payoutResult);
+    
+    this.setPhase('complete');
   }
 
   /**
@@ -961,6 +1184,10 @@ export class PlinkoSlotEngine {
     
     // Clear ring effects
     this.ringEffects = [];
+    
+    // Clear win celebrations
+    this.winCelebrations = [];
+    this.currentCelebrationIndex = -1;
   }
 
   /**
