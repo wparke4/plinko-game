@@ -248,7 +248,7 @@
     </div>
 
     <!-- Bet Amount -->
-    <div class="mb-6">
+    <div class="mb-12">
       <label class="text-sm font-medium text-neutral-400 uppercase tracking-wide">Bet Amount</label>
       <div class="relative mt-2">
         <span class="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-neutral-500">$</span>
@@ -260,17 +260,6 @@
           disabled={isRunning}
           class="w-full rounded-lg bg-neutral-800 border border-neutral-700 pl-8 pr-4 py-3 text-white text-lg font-medium focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 disabled:opacity-50 transition-colors"
         />
-      </div>
-      <div class="flex gap-2 mt-2">
-        {#each [10, 50, 100, 500] as preset}
-          <button
-            onclick={() => betAmount = preset}
-            disabled={isRunning}
-            class="flex-1 py-1 text-sm rounded bg-neutral-800 border border-neutral-700 text-neutral-400 hover:bg-neutral-700 hover:text-white disabled:opacity-50 transition-colors"
-          >
-            ${preset}
-          </button>
-        {/each}
       </div>
     </div>
 

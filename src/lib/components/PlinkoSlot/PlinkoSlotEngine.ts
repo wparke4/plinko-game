@@ -85,6 +85,9 @@ export class PlinkoSlotEngine {
   private isRunning = false;
   private ballDropTimer: ReturnType<typeof setTimeout> | null = null;
   
+  // Stuck ball detection
+  private stuckBallTracker: Map<number, { lowVelocityStartTime: number }> = new Map();
+  
   // Callbacks
   private callbacks: PlinkoSlotCallbacks = {};
   
@@ -224,6 +227,9 @@ export class PlinkoSlotEngine {
 
     // Set up collision detection
     this.setupCollisionHandling();
+    
+    // Set up stuck ball detection
+    this.setupStuckBallDetection();
     
     // Set up ring effect rendering
     this.setupRingEffectRendering();
@@ -996,6 +1002,64 @@ export class PlinkoSlotEngine {
       }
     });
   }
+  
+  /**
+   * Set up stuck ball detection to prevent balls from balancing on pegs.
+   * Checks each physics tick for balls with very low velocity and applies
+   * a small random impulse to knock them free.
+   */
+  private setupStuckBallDetection(): void {
+    // Velocity threshold below which a ball is considered potentially stuck
+    const STUCK_VELOCITY_THRESHOLD = 0.15;
+    // Time in ms a ball must be below threshold before we nudge it
+    const STUCK_TIME_THRESHOLD = 300;
+    // Impulse strength for the nudge
+    const NUDGE_IMPULSE = 0.0003;
+    
+    Matter.Events.on(this.engine, 'beforeUpdate', () => {
+      if (!this.runState || this.runState.phase !== 'dropping') return;
+      
+      const now = Date.now();
+      
+      for (const [ballId, body] of this.ballBodies) {
+        // Calculate total velocity magnitude
+        const velocityMagnitude = Math.sqrt(
+          body.velocity.x * body.velocity.x + 
+          body.velocity.y * body.velocity.y
+        );
+        
+        // Check if ball is moving very slowly
+        if (velocityMagnitude < STUCK_VELOCITY_THRESHOLD) {
+          // Start tracking if not already
+          if (!this.stuckBallTracker.has(ballId)) {
+            this.stuckBallTracker.set(ballId, { lowVelocityStartTime: now });
+          } else {
+            // Check if it's been stuck long enough
+            const tracker = this.stuckBallTracker.get(ballId)!;
+            const stuckDuration = now - tracker.lowVelocityStartTime;
+            
+            if (stuckDuration > STUCK_TIME_THRESHOLD) {
+              // Apply a small random horizontal impulse to knock the ball free
+              const randomDirection = Math.random() < 0.5 ? -1 : 1;
+              const impulseX = NUDGE_IMPULSE * randomDirection * (0.8 + Math.random() * 0.4);
+              const impulseY = NUDGE_IMPULSE * 0.5; // Small downward nudge too
+              
+              Matter.Body.applyForce(body, body.position, {
+                x: impulseX,
+                y: impulseY,
+              });
+              
+              // Reset tracker so we don't nudge continuously
+              tracker.lowVelocityStartTime = now;
+            }
+          }
+        } else {
+          // Ball is moving normally, remove from tracker
+          this.stuckBallTracker.delete(ballId);
+        }
+      }
+    });
+  }
 
   /**
    * Handle a collision between two bodies.
@@ -1150,6 +1214,9 @@ export class PlinkoSlotEngine {
       // Remove ball from physics
       Matter.Composite.remove(this.engine.world, ballBody);
       this.ballBodies.delete(ballId);
+      
+      // Remove from stuck ball tracker
+      this.stuckBallTracker.delete(ballId);
 
       // Callback
       this.callbacks.onBallExited?.(ballId);
@@ -1369,6 +1436,9 @@ export class PlinkoSlotEngine {
     
     // Clear sparkles
     this.sparkles = [];
+    
+    // Clear stuck ball tracker
+    this.stuckBallTracker.clear();
   }
 
   /**
