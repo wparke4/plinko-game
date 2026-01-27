@@ -62,9 +62,11 @@
     multiplier: number;
     payout: number;
     isNew: boolean; // For spawn animation
+    isExiting: boolean; // For exit animation
   }
   let winEntries = $state<WinEntry[]>([]);
   let winEntryIdCounter = 0;
+  const MAX_WIN_ENTRIES = 5;
   
   // Provably fair state
   let fairState = $state({
@@ -124,10 +126,26 @@
           multiplier,
           payout,
           isNew: true,
+          isExiting: false,
         };
         
-        // Add to the beginning (newest at top, but we'll reverse in display)
-        winEntries = [newEntry, ...winEntries].slice(0, 5);
+        // Check if we need to remove the oldest entry (at the end of array)
+        const nonExitingEntries = winEntries.filter(e => !e.isExiting);
+        if (nonExitingEntries.length >= MAX_WIN_ENTRIES) {
+          // Mark the oldest entry as exiting
+          const oldestId = nonExitingEntries[nonExitingEntries.length - 1].id;
+          winEntries = winEntries.map(e => 
+            e.id === oldestId ? { ...e, isExiting: true } : e
+          );
+          
+          // Remove the exiting entry after animation completes
+          setTimeout(() => {
+            winEntries = winEntries.filter(e => e.id !== oldestId);
+          }, 400);
+        }
+        
+        // Add new entry at the beginning (newest at top)
+        winEntries = [newEntry, ...winEntries];
         
         // Remove the "new" flag after animation completes
         setTimeout(() => {
@@ -275,12 +293,13 @@
     <!-- Spacer to push wins to bottom -->
     <div class="flex-1"></div>
 
-    <!-- Individual Wins Display (at bottom) -->
-    <div class="min-h-[280px] flex flex-col justify-end gap-2">
-      {#each [...winEntries].reverse() as entry (entry.id)}
+    <!-- Individual Wins Display (at bottom, grows upward) -->
+    <div class="min-h-[280px] flex flex-col justify-end gap-2 overflow-hidden">
+      {#each winEntries as entry (entry.id)}
         <div 
           class="win-entry flex items-center justify-between p-3 bg-neutral-900 border border-neutral-700 rounded-lg overflow-hidden
-            {entry.isNew ? 'win-entry-new' : ''}"
+            {entry.isNew ? 'win-entry-new' : ''}
+            {entry.isExiting ? 'win-entry-exit' : ''}"
         >
           <!-- Left side: count + symbol -->
           <div class="flex items-center gap-2">
@@ -470,13 +489,28 @@
     box-shadow: 0 0 20px rgba(34, 197, 94, 0.4), inset 0 0 20px rgba(34, 197, 94, 0.1);
   }
   
+  .win-entry-exit {
+    animation: winEntryExit 0.4s ease-in forwards;
+  }
+  
+  @keyframes winEntryExit {
+    0% {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(0.8) translateY(30px);
+    }
+  }
+  
   @keyframes winEntrySpawn {
     0% {
       opacity: 0;
-      transform: scale(0.5) translateY(20px);
+      transform: scale(0.95) translateY(-10px);
     }
-    50% {
-      transform: scale(1.05) translateY(-5px);
+    60% {
+      transform: scale(1) translateY(2px);
     }
     100% {
       opacity: 1;
