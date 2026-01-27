@@ -208,7 +208,7 @@ export class PlinkoSlotEngine {
     // Create Matter.js engine with fixed timestep
     this.engine = Matter.Engine.create({
       timing: {
-        timeScale: 1.75, // Speed up physics simulation
+        timeScale: 2.25, // Speed up physics simulation
       },
     });
     
@@ -292,10 +292,43 @@ export class PlinkoSlotEngine {
     
     // Use afterRender to draw SVG symbols on top of pegs
     Matter.Events.on(this.render, 'afterRender', () => {
+      this.renderBalls();
       this.renderPegSymbols();
       this.updateAndRenderSparkles();
       this.renderWinCelebrations();
     });
+  }
+  
+  /**
+   * Render balls with a simple, subtle gradient.
+   */
+  private renderBalls(): void {
+    const ctx = this.ctx;
+    const rowCount = this.config.board.rows;
+    const ballRadius = ((24 - rowCount) / 2) * PlinkoSlotEngine.SIZE_SCALE * 1.5;
+    
+    for (const [, body] of this.ballBodies) {
+      const x = body.position.x;
+      const y = body.position.y;
+      
+      ctx.save();
+      
+      // Vibrant neon pink gradient
+      const gradient = ctx.createRadialGradient(
+        x, y, 0,
+        x, y, ballRadius
+      );
+      gradient.addColorStop(0, '#ff4d94');   // Hot pink center
+      gradient.addColorStop(0.6, '#e6006a'); // Vibrant magenta
+      gradient.addColorStop(1, '#b30052');   // Deep magenta edge
+      
+      ctx.beginPath();
+      ctx.arc(x, y, ballRadius, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      ctx.restore();
+    }
   }
   
   /**
@@ -1320,7 +1353,7 @@ export class PlinkoSlotEngine {
       frictionAir: this.config.physics.frictionAir,
       label: `ball-${ballId}`,
       render: {
-        fillStyle: '#FF1344',
+        visible: false, // We'll render custom balls in afterRender
       },
       collisionFilter: {
         category: CATEGORY_BALL,
