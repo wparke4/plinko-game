@@ -133,31 +133,44 @@ export class PlinkoSlotEngine {
   private lastSparkleSpawn = 0;
   private static readonly SPARKLE_SPAWN_RATE = 25; // ms between spawns per peg
   
-  // Symbol payouts (multipliers based on count) - min 3 to win
-  private static readonly SYMBOL_PAYOUTS: Record<number, Record<number, number>> = {
-    // level: { count: multiplier }
-    1: { 3: 0.5, 4: 1, 5: 2, 6: 4, 7: 8, 8: 16 },       // Orange (most common)
-    2: { 3: 0.75, 4: 1.5, 5: 3, 6: 6, 7: 12, 8: 24 },   // Watermelon
-    3: { 3: 1, 4: 2, 5: 4, 6: 8, 7: 16, 8: 32 },        // Bear
-    4: { 3: 1.5, 4: 3, 5: 6, 6: 12, 7: 24, 8: 48 },     // Heart
-    5: { 3: 2, 4: 4, 5: 8, 6: 16, 7: 32, 8: 64 },       // Star
-    6: { 3: 3, 4: 6, 5: 12, 6: 24, 7: 48, 8: 96 },      // Gem
-    7: { 3: 5, 4: 10, 5: 20, 6: 40, 7: 80, 8: 160 },    // Diamond (most valuable)
-  };
+  // Symbol definitions - easy to add more symbols here!
+  // Each symbol has: id, name, color (for glow), payouts by count
+  private static readonly SYMBOLS: Array<{
+    id: number;
+    name: string;
+    color: string;
+    payouts: Record<number, number>; // count -> multiplier
+  }> = [
+    { id: 1, name: 'Orange',     color: '#FF8C00', payouts: { 3: 0.5, 4: 1, 5: 2, 6: 4, 7: 8, 8: 16 } },
+    { id: 2, name: 'Watermelon', color: '#FF6B6B', payouts: { 3: 0.75, 4: 1.5, 5: 3, 6: 6, 7: 12, 8: 24 } },
+    { id: 3, name: 'Bear',       color: '#8B4513', payouts: { 3: 1, 4: 2, 5: 4, 6: 8, 7: 16, 8: 32 } },
+    { id: 4, name: 'Heart',      color: '#FF1493', payouts: { 3: 1.5, 4: 3, 5: 6, 6: 12, 7: 24, 8: 48 } },
+    { id: 5, name: 'Star',       color: '#FFD700', payouts: { 3: 2, 4: 4, 5: 8, 6: 16, 7: 32, 8: 64 } },
+    { id: 6, name: 'Gem',        color: '#00CED1', payouts: { 3: 3, 4: 6, 5: 12, 6: 24, 7: 48, 8: 96 } },
+    { id: 7, name: 'Diamond',    color: '#E0E0FF', payouts: { 3: 5, 4: 10, 5: 20, 6: 40, 7: 80, 8: 160 } },
+    // Add more symbols here! Just add a new entry with id, name, color, and payouts
+  ];
   
-  // Symbol colors for celebration glow
-  private static readonly SYMBOL_COLORS: Record<number, string> = {
-    1: '#FF8C00', // Orange
-    2: '#FF6B6B', // Watermelon (red/pink)
-    3: '#8B4513', // Bear (brown)
-    4: '#FF1493', // Heart (pink)
-    5: '#FFD700', // Star (gold)
-    6: '#00CED1', // Gem (cyan)
-    7: '#E0E0FF', // Diamond (white/blue)
-  };
+  // Helper to get symbol by ID
+  private static getSymbol(id: number) {
+    return PlinkoSlotEngine.SYMBOLS.find(s => s.id === id);
+  }
   
-  // First peg ID (top row, middle) - stays gray
-  private static readonly FIRST_PEG_ID = '0-1';
+  // Helper to get random symbol ID
+  private static getRandomSymbolId(): number {
+    const randomIndex = Math.floor(Math.random() * PlinkoSlotEngine.SYMBOLS.length);
+    return PlinkoSlotEngine.SYMBOLS[randomIndex].id;
+  }
+  
+  // Helper to get symbol color
+  private static getSymbolColor(id: number): string {
+    return PlinkoSlotEngine.getSymbol(id)?.color ?? '#FFFFFF';
+  }
+  
+  // Helper to get symbol payouts
+  private static getSymbolPayouts(id: number): Record<number, number> {
+    return PlinkoSlotEngine.getSymbol(id)?.payouts ?? {};
+  }
   
   // Hits required before first color change
   private static readonly HITS_FOR_FIRST_COLOR = 1;
@@ -290,7 +303,7 @@ export class PlinkoSlotEngine {
     if (now - this.lastSparkleSpawn < PlinkoSlotEngine.SPARKLE_SPAWN_RATE) return;
     this.lastSparkleSpawn = now;
     
-    const symbolColor = PlinkoSlotEngine.SYMBOL_COLORS[celebration.symbolLevel] ?? '#FFFFFF';
+    const symbolColor = PlinkoSlotEngine.getSymbolColor(celebration.symbolLevel);
     const scale = PlinkoSlotEngine.SIZE_SCALE;
     const rowCount = this.config.board.rows;
     const pinRadius = ((24 - rowCount) / 2) * scale;
@@ -431,11 +444,12 @@ export class PlinkoSlotEngine {
   private detectWins(): Array<{ symbolLevel: number; pegIds: string[]; multiplier: number }> {
     const wins: Array<{ symbolLevel: number; pegIds: string[]; multiplier: number }> = [];
     
-    // Count pegs at each symbol level (1-7)
+    // Count pegs at each symbol level (any valid symbol)
     const symbolPegs: Map<number, string[]> = new Map();
     
     for (const [pegId, peg] of this.pegs) {
-      if (peg.level >= 1 && peg.level <= 7) {
+      // Check if this peg has a valid symbol (level > 0)
+      if (peg.level > 0 && PlinkoSlotEngine.getSymbol(peg.level)) {
         if (!symbolPegs.has(peg.level)) {
           symbolPegs.set(peg.level, []);
         }
@@ -447,7 +461,7 @@ export class PlinkoSlotEngine {
     for (const [level, pegIds] of symbolPegs) {
       const count = pegIds.length;
       if (count >= 3) {
-        const payoutTable = PlinkoSlotEngine.SYMBOL_PAYOUTS[level];
+        const payoutTable = PlinkoSlotEngine.getSymbolPayouts(level);
         // Get the multiplier for this count (cap at max defined)
         const maxCount = Math.min(count, 8);
         const multiplier = payoutTable[maxCount] ?? payoutTable[8] ?? 0;
@@ -536,7 +550,7 @@ export class PlinkoSlotEngine {
     const scale = PlinkoSlotEngine.SIZE_SCALE;
     const rowCount = this.config.board.rows;
     const pinRadius = ((24 - rowCount) / 2) * scale;
-    const symbolColor = PlinkoSlotEngine.SYMBOL_COLORS[celebration.symbolLevel] ?? '#FFFFFF';
+    const symbolColor = PlinkoSlotEngine.getSymbolColor(celebration.symbolLevel);
     
     // Pulsing effect for SYMBOL ONLY (sine wave) - more dramatic scaling
     const pulseFrequency = 1.3; // pulses per celebration (30% slower)
@@ -640,29 +654,8 @@ export class PlinkoSlotEngine {
     const maxSize = pinRadius * 1.8;
     
     for (const [pegId, peg] of this.pegs) {
-      // Render special indicator for first peg (not part of the game)
-      if (pegId === PlinkoSlotEngine.FIRST_PEG_ID) {
-        ctx.save();
-        
-        // Draw a subtle X to indicate this peg doesn't count
-        const xSize = pinRadius * 0.5;
-        ctx.strokeStyle = '#444444';
-        ctx.lineWidth = 2 * scale;
-        ctx.lineCap = 'round';
-        
-        ctx.beginPath();
-        ctx.moveTo(peg.x - xSize, peg.y - xSize);
-        ctx.lineTo(peg.x + xSize, peg.y + xSize);
-        ctx.moveTo(peg.x + xSize, peg.y - xSize);
-        ctx.lineTo(peg.x - xSize, peg.y + xSize);
-        ctx.stroke();
-        
-        ctx.restore();
-        continue;
-      }
-      
-      // Render symbols for levels 1-7
-      if (peg.level >= 1 && peg.level <= 7) {
+      // Render symbol if peg has one (level > 0 means it has a symbol)
+      if (peg.level > 0) {
         const symbolImg = this.pegSymbols.get(peg.level);
         if (symbolImg && symbolImg.naturalWidth > 0 && symbolImg.naturalHeight > 0) {
           ctx.save();
@@ -879,19 +872,13 @@ export class PlinkoSlotEngine {
         };
         this.pegs.set(pegId, peg);
 
-        // Check if this is the first peg (center of top row) - it's decorative only
-        const isFirstPeg = pegId === PlinkoSlotEngine.FIRST_PEG_ID;
-        
         // Create Matter.js body
         const body = Matter.Bodies.circle(colX, rowY, pinRadius, {
           isStatic: true,
           restitution: this.config.physics.restitution,
           label: `peg-${pegId}`,
           render: {
-            // First peg is darker and has a border to show it's different
-            fillStyle: isFirstPeg ? '#1a1a1a' : this.config.pegColors['0'],
-            strokeStyle: isFirstPeg ? '#333333' : undefined,
-            lineWidth: isFirstPeg ? 2 * SIZE_SCALE : 0,
+            fillStyle: this.config.pegColors['0'],
           },
           collisionFilter: {
             category: CATEGORY_PIN,
@@ -1034,62 +1021,23 @@ export class PlinkoSlotEngine {
     
     if (!peg) return;
 
-    // Check if this ball has already hit this peg (unique ball rule)
-    const ballBit = 1 << (ballId - 1);
-    if ((peg.hitMask & ballBit) !== 0) {
-      // Ball already hit this peg, no level up
-      return;
-    }
-
-    // Mark this ball as having hit the peg
-    peg.hitMask |= ballBit;
+    // Increment hit count on every hit (same ball can level up multiple times)
     peg.hitCount++;
     
-    // Add ring effect for the hit (always show, even for first peg)
+    // Add ring effect for the hit
     this.addRingEffect(peg.x, peg.y, this.config.pegColors['0']);
     
-    // First peg (top row middle) never changes color - every ball hits it
-    if (pegId === PlinkoSlotEngine.FIRST_PEG_ID) {
-      // Still record the hit but don't change level
-      const ball = this.runState.balls[ballId - 1];
-      if (ball) {
-        ball.pegsHit.push(pegId);
-      }
-      
-      // Record in replay log
-      if (this.replayLog) {
-        this.replayLog.collisions.push({
-          ballId,
-          pegId,
-          timestamp: Date.now(),
-          newPegLevel: peg.level,
-        });
-      }
-      
-      // Callback with level 0
-      this.callbacks.onPegHit?.(pegId, peg.level, ballId);
-      return;
-    }
+    // Randomly select a new symbol on each hit
+    const newSymbolId = PlinkoSlotEngine.getRandomSymbolId();
+    peg.level = newSymbolId;
     
-    // Calculate level based on hit count (need 3 hits for first color)
-    // hitCount 1,2 -> level 0
-    // hitCount 3 -> level 1
-    // hitCount 4 -> level 2, etc.
-    const newLevel = Math.max(0, peg.hitCount - (PlinkoSlotEngine.HITS_FOR_FIRST_COLOR - 1));
-    const cappedLevel = Math.min(newLevel, this.config.board.maxPegLevel);
+    // Update visual
+    this.updatePegVisual(pegId, peg.level);
     
-    // Only update if level actually changed
-    if (cappedLevel > peg.level) {
-      peg.level = cappedLevel;
-      
-      // Update visual with colored ring effect
-      this.updatePegVisual(pegId, peg.level);
-      
-      // Update ring color to match new peg color
-      if (this.ringEffects.length > 0) {
-        const lastRing = this.ringEffects[this.ringEffects.length - 1];
-        lastRing.color = this.config.pegColors[peg.level.toString()] ?? this.config.pegColors['0'];
-      }
+    // Update ring color to match new symbol
+    if (this.ringEffects.length > 0) {
+      const lastRing = this.ringEffects[this.ringEffects.length - 1];
+      lastRing.color = PlinkoSlotEngine.getSymbolColor(peg.level);
     }
     
     // Record in ball's hit list
@@ -1143,36 +1091,16 @@ export class PlinkoSlotEngine {
   }
 
   /**
-   * Update peg visual based on level.
+   * Update peg visual based on level (symbol ID).
    */
   private updatePegVisual(pegId: string, level: number): void {
     const body = this.pegBodies.get(pegId);
     if (!body) return;
-
-    const scale = PlinkoSlotEngine.SIZE_SCALE;
     
-    // Levels 1-7: Keep gray color, SVG symbols will be drawn on top
-    // Levels 8+: Use colored circles
-    if (level >= 1 && level <= 7) {
-      // Keep default gray color for symbol levels (SVG will be rendered on top)
-      body.render.fillStyle = this.config.pegColors['0'];
-      body.render.strokeStyle = undefined;
-      body.render.lineWidth = 0;
-    } else {
-      const color = this.config.pegColors[level.toString()] ?? this.config.pegColors['0'];
-      body.render.fillStyle = color;
-
-      // Add glow effect for high levels (scaled for larger pegs)
-      if (level >= this.config.pegGlow.thresholdStrong) {
-        // Strong glow for level 10
-        body.render.strokeStyle = '#FFFFFF';
-        body.render.lineWidth = 4 * scale;
-      } else if (level >= this.config.pegGlow.thresholdSoft) {
-        // Soft glow for level 6+
-        body.render.strokeStyle = color;
-        body.render.lineWidth = 3 * scale;
-      }
-    }
+    // All symbols use the gray background - SVG will be rendered on top
+    body.render.fillStyle = this.config.pegColors['0'];
+    body.render.strokeStyle = undefined;
+    body.render.lineWidth = 0;
   }
 
   /**
@@ -1388,17 +1316,9 @@ export class PlinkoSlotEngine {
       
       const body = this.pegBodies.get(pegId);
       if (body) {
-        // First peg keeps its distinct styling
-        const isFirstPeg = pegId === PlinkoSlotEngine.FIRST_PEG_ID;
-        if (isFirstPeg) {
-          body.render.fillStyle = '#1a1a1a';
-          body.render.strokeStyle = '#333333';
-          body.render.lineWidth = 2 * PlinkoSlotEngine.SIZE_SCALE;
-        } else {
-          body.render.fillStyle = this.config.pegColors['0'];
-          body.render.strokeStyle = undefined;
-          body.render.lineWidth = 0;
-        }
+        body.render.fillStyle = this.config.pegColors['0'];
+        body.render.strokeStyle = undefined;
+        body.render.lineWidth = 0;
       }
     }
 
