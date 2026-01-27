@@ -1006,15 +1006,15 @@ export class PlinkoSlotEngine {
   /**
    * Set up stuck ball detection to prevent balls from balancing on pegs.
    * Checks each physics tick for balls with very low velocity and applies
-   * a small random impulse to knock them free.
+   * a velocity nudge to knock them free.
    */
   private setupStuckBallDetection(): void {
     // Velocity threshold below which a ball is considered potentially stuck
-    const STUCK_VELOCITY_THRESHOLD = 0.15;
+    const STUCK_VELOCITY_THRESHOLD = 0.5;
     // Time in ms a ball must be below threshold before we nudge it
-    const STUCK_TIME_THRESHOLD = 300;
-    // Impulse strength for the nudge
-    const NUDGE_IMPULSE = 0.0003;
+    const STUCK_TIME_THRESHOLD = 150;
+    // Velocity to apply when nudging (direct velocity, not force)
+    const NUDGE_VELOCITY = 2;
     
     Matter.Events.on(this.engine, 'beforeUpdate', () => {
       if (!this.runState || this.runState.phase !== 'dropping') return;
@@ -1039,14 +1039,15 @@ export class PlinkoSlotEngine {
             const stuckDuration = now - tracker.lowVelocityStartTime;
             
             if (stuckDuration > STUCK_TIME_THRESHOLD) {
-              // Apply a small random horizontal impulse to knock the ball free
+              // Apply a random horizontal velocity kick to knock the ball free
               const randomDirection = Math.random() < 0.5 ? -1 : 1;
-              const impulseX = NUDGE_IMPULSE * randomDirection * (0.8 + Math.random() * 0.4);
-              const impulseY = NUDGE_IMPULSE * 0.5; // Small downward nudge too
+              const kickX = NUDGE_VELOCITY * randomDirection * (0.8 + Math.random() * 0.4);
+              const kickY = NUDGE_VELOCITY * 0.5; // Downward kick to help it fall
               
-              Matter.Body.applyForce(body, body.position, {
-                x: impulseX,
-                y: impulseY,
+              // Use setVelocity for immediate effect instead of applyForce
+              Matter.Body.setVelocity(body, {
+                x: body.velocity.x + kickX,
+                y: body.velocity.y + kickY,
               });
               
               // Reset tracker so we don't nudge continuously
