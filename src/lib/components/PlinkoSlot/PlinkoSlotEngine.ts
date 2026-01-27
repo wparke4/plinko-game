@@ -113,7 +113,7 @@ export class PlinkoSlotEngine {
   }> = [];
   private currentCelebrationIndex = -1;
   private celebrationStartTime = 0;
-  private static readonly CELEBRATION_DURATION = 1500; // ms per win celebration
+  private static readonly CELEBRATION_DURATION = 900; // ms per win celebration (fast)
   
   // Sparkle particle system
   private sparkles: Array<{
@@ -160,7 +160,7 @@ export class PlinkoSlotEngine {
   private static readonly FIRST_PEG_ID = '0-1';
   
   // Hits required before first color change
-  private static readonly HITS_FOR_FIRST_COLOR = 3;
+  private static readonly HITS_FOR_FIRST_COLOR = 1;
   
   // Size scale factor (2x for larger pegs/balls)
   private static readonly SIZE_SCALE = 2.0;
@@ -187,7 +187,7 @@ export class PlinkoSlotEngine {
     // Create Matter.js engine with fixed timestep
     this.engine = Matter.Engine.create({
       timing: {
-        timeScale: 1,
+        timeScale: 1.75, // Speed up physics simulation
       },
     });
     
@@ -284,7 +284,7 @@ export class PlinkoSlotEngine {
     const elapsed = now - celebration.startTime;
     
     // Don't spawn in the last 400ms (let existing sparkles fade out)
-    if (elapsed > celebration.duration - 400) return;
+    if (elapsed > celebration.duration - 250) return;
     
     // Check spawn rate
     if (now - this.lastSparkleSpawn < PlinkoSlotEngine.SPARKLE_SPAWN_RATE) return;
@@ -516,7 +516,7 @@ export class PlinkoSlotEngine {
     setTimeout(() => {
       this.currentCelebrationIndex++;
       this.startNextCelebration();
-    }, celebration.duration + 300); // Small gap between celebrations
+    }, celebration.duration + 150); // Small gap between celebrations
   }
   
   /**
@@ -539,9 +539,9 @@ export class PlinkoSlotEngine {
     const symbolColor = PlinkoSlotEngine.SYMBOL_COLORS[celebration.symbolLevel] ?? '#FFFFFF';
     
     // Pulsing effect for SYMBOL ONLY (sine wave) - more dramatic scaling
-    const pulseFrequency = 3; // pulses per celebration
+    const pulseFrequency = 1.3; // pulses per celebration (30% slower)
     const pulsePhase = Math.sin(progress * Math.PI * 2 * pulseFrequency);
-    const symbolPulseScale = 1 + 0.5 * pulsePhase; // 50% scale variation for symbol
+    const symbolPulseScale = 1 + 0.2 * pulsePhase; // 35% scale variation for symbol (30% less)
     
     // Glow intensity (starts strong, fades slightly, then strong at end)
     const glowIntensity = 0.6 + 0.4 * Math.sin(progress * Math.PI);
@@ -595,7 +595,23 @@ export class PlinkoSlotEngine {
           drawWidth = maxSize * aspectRatio;
         }
         
+        // Draw dark circular backdrop behind the symbol for better visibility
+        const backdropRadius = Math.max(drawWidth, drawHeight) * 0.6;
+        const backdropGradient = ctx.createRadialGradient(
+          peg.x, peg.y, 0,
+          peg.x, peg.y, backdropRadius
+        );
+        backdropGradient.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
+        backdropGradient.addColorStop(0.7, 'rgba(0, 0, 0, 0.6)');
+        backdropGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        
         ctx.globalAlpha = 1;
+        ctx.fillStyle = backdropGradient;
+        ctx.beginPath();
+        ctx.arc(peg.x, peg.y, backdropRadius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Draw the symbol
         ctx.drawImage(
           symbolImg,
           peg.x - drawWidth / 2,
@@ -624,6 +640,27 @@ export class PlinkoSlotEngine {
     const maxSize = pinRadius * 1.8;
     
     for (const [pegId, peg] of this.pegs) {
+      // Render special indicator for first peg (not part of the game)
+      if (pegId === PlinkoSlotEngine.FIRST_PEG_ID) {
+        ctx.save();
+        
+        // Draw a subtle X to indicate this peg doesn't count
+        const xSize = pinRadius * 0.5;
+        ctx.strokeStyle = '#444444';
+        ctx.lineWidth = 2 * scale;
+        ctx.lineCap = 'round';
+        
+        ctx.beginPath();
+        ctx.moveTo(peg.x - xSize, peg.y - xSize);
+        ctx.lineTo(peg.x + xSize, peg.y + xSize);
+        ctx.moveTo(peg.x + xSize, peg.y - xSize);
+        ctx.lineTo(peg.x - xSize, peg.y + xSize);
+        ctx.stroke();
+        
+        ctx.restore();
+        continue;
+      }
+      
       // Render symbols for levels 1-7
       if (peg.level >= 1 && peg.level <= 7) {
         const symbolImg = this.pegSymbols.get(peg.level);
@@ -842,13 +879,19 @@ export class PlinkoSlotEngine {
         };
         this.pegs.set(pegId, peg);
 
+        // Check if this is the first peg (center of top row) - it's decorative only
+        const isFirstPeg = pegId === PlinkoSlotEngine.FIRST_PEG_ID;
+        
         // Create Matter.js body
         const body = Matter.Bodies.circle(colX, rowY, pinRadius, {
           isStatic: true,
           restitution: this.config.physics.restitution,
           label: `peg-${pegId}`,
           render: {
-            fillStyle: this.config.pegColors['0'],
+            // First peg is darker and has a border to show it's different
+            fillStyle: isFirstPeg ? '#1a1a1a' : this.config.pegColors['0'],
+            strokeStyle: isFirstPeg ? '#333333' : undefined,
+            lineWidth: isFirstPeg ? 2 * SIZE_SCALE : 0,
           },
           collisionFilter: {
             category: CATEGORY_PIN,
@@ -1345,9 +1388,17 @@ export class PlinkoSlotEngine {
       
       const body = this.pegBodies.get(pegId);
       if (body) {
-        body.render.fillStyle = this.config.pegColors['0'];
-        body.render.strokeStyle = undefined;
-        body.render.lineWidth = 0;
+        // First peg keeps its distinct styling
+        const isFirstPeg = pegId === PlinkoSlotEngine.FIRST_PEG_ID;
+        if (isFirstPeg) {
+          body.render.fillStyle = '#1a1a1a';
+          body.render.strokeStyle = '#333333';
+          body.render.lineWidth = 2 * PlinkoSlotEngine.SIZE_SCALE;
+        } else {
+          body.render.fillStyle = this.config.pegColors['0'];
+          body.render.strokeStyle = undefined;
+          body.render.lineWidth = 0;
+        }
       }
     }
 

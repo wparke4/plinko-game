@@ -107,19 +107,6 @@
         // Calculate winnings
         const winnings = betAmount * result.totalMultiplier;
         balance += winnings;
-        
-        // Add to history
-        const entry: RunHistoryEntry = {
-          runId: `run-${Date.now()}`,
-          betAmount: betAmount,
-          multiplier: result.totalMultiplier,
-          payout: winnings,
-          profit: winnings - betAmount,
-          timestamp: Date.now(),
-          highestTier: result.highestCountTier?.tierName ?? null,
-          patternsHit: result.patterns.filter(p => p.achieved).map(p => p.patternName)
-        };
-        runHistory = [entry, ...runHistory].slice(0, 50);
       },
       onPhaseChange: (phase) => {
         gamePhase = phase;
@@ -296,18 +283,9 @@
       <button
         onclick={handlePlay}
         disabled={!canPlay}
-        class="w-full rounded-lg bg-green-500 py-4 text-lg font-bold text-slate-900 transition-all hover:bg-green-400 active:bg-green-600 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed mb-6
-          {isRunning || isCelebrating ? 'animate-pulse' : ''}"
+        class="w-full rounded-lg bg-green-500 py-4 text-lg font-bold text-slate-900 transition-all hover:bg-green-400 active:bg-green-600 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed mb-6"
       >
-        {#if isRunning}
-          Running...
-        {:else if isCelebrating}
-          Celebrating...
-        {:else if gamePhase === 'complete'}
-          Play Again
-        {:else}
-          Drop 10 Balls
-        {/if}
+        Play
       </button>
 
       <!-- Spacer to push wins to bottom -->
