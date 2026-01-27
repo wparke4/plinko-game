@@ -18,6 +18,8 @@ export interface Peg {
   level: number;
   /** Bitmask tracking which balls (1-10) have hit this peg */
   hitMask: number;
+  /** Total count of unique ball hits */
+  hitCount: number;
   /** X position on canvas */
   x: number;
   /** Y position on canvas */
@@ -152,6 +154,7 @@ export interface ReplayLog {
     id: string;
     level: number;
     hitMask: number;
+    hitCount: number;
   }[];
   payoutResult: PayoutResult;
 }

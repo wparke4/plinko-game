@@ -22,6 +22,7 @@ import type {
 } from './types';
 import type { ProvablyFairSeed } from '$lib/utils/provablyFair';
 import paytableDefault from './paytable.json';
+import orangeSvg from '$lib/assets/slot/orange.svg';
 
 // Collision categories
 const CATEGORY_PIN = 0x0001;
@@ -77,12 +78,36 @@ export class PlinkoSlotEngine {
   // Callbacks
   private callbacks: PlinkoSlotCallbacks = {};
   
+  // Ring effect animations
+  private ringEffects: Array<{
+    x: number;
+    y: number;
+    startTime: number;
+    duration: number;
+    color: string;
+    isOuter: boolean;
+    delay: number;
+  }> = [];
+  
+  // SVG symbol images for peg levels
+  private pegSymbols: Map<number, HTMLImageElement> = new Map();
+  private symbolsLoaded = false;
+  
+  // First peg ID (top row, middle) - stays gray
+  private static readonly FIRST_PEG_ID = '0-1';
+  
+  // Hits required before first color change
+  private static readonly HITS_FOR_FIRST_COLOR = 3;
+  
+  // Size scale factor (2x for larger pegs/balls)
+  private static readonly SIZE_SCALE = 2.0;
+  
   // Dimensions
   static readonly WIDTH = 836;
-  static readonly HEIGHT = 627;
+  static readonly HEIGHT = 750;
   private static readonly PADDING_X = 52;
-  private static readonly PADDING_TOP = 36;
-  private static readonly PADDING_BOTTOM = 28;
+  private static readonly PADDING_TOP = 130;
+  private static readonly PADDING_BOTTOM = 50;
 
   // Sensor for detecting ball exits
   private sensor: Matter.Body | null = null;
@@ -109,20 +134,174 @@ export class PlinkoSlotEngine {
       isFixed: true,
     });
     
-    // Create renderer
+    // Create renderer (transparent background - we draw our own in beforeRender)
     this.render = Matter.Render.create({
       engine: this.engine,
       canvas: this.canvas,
       options: {
         width: PlinkoSlotEngine.WIDTH,
         height: PlinkoSlotEngine.HEIGHT,
-        background: '#000000',
+        background: 'transparent',
         wireframes: false,
       },
     });
 
     // Set up collision detection
     this.setupCollisionHandling();
+    
+    // Set up ring effect rendering
+    this.setupRingEffectRendering();
+    
+    // Load peg symbol SVGs
+    this.loadPegSymbols();
+  }
+  
+  /**
+   * Load SVG symbols for peg levels.
+   */
+  private loadPegSymbols(): void {
+    // Level 1 symbol: orange
+    const orangeImg = new Image();
+    orangeImg.src = orangeSvg;
+    orangeImg.onload = () => {
+      this.pegSymbols.set(1, orangeImg);
+      this.symbolsLoaded = true;
+    };
+  }
+  
+  /**
+   * Set up custom rendering for ring effects (rendered UNDER balls).
+   */
+  private setupRingEffectRendering(): void {
+    // Use beforeRender to draw rings, then Matter.js draws bodies on top
+    Matter.Events.on(this.render, 'beforeRender', () => {
+      // Clear and draw background first
+      this.ctx.fillStyle = '#000000';
+      this.ctx.fillRect(0, 0, PlinkoSlotEngine.WIDTH, PlinkoSlotEngine.HEIGHT);
+      
+      // Draw ring effects (under everything)
+      this.renderRingEffects();
+    });
+    
+    // Use afterRender to draw SVG symbols on top of pegs
+    Matter.Events.on(this.render, 'afterRender', () => {
+      this.renderPegSymbols();
+    });
+  }
+  
+  /**
+   * Render SVG symbols on pegs that have them.
+   */
+  private renderPegSymbols(): void {
+    if (!this.symbolsLoaded) return;
+    
+    const ctx = this.ctx;
+    const scale = PlinkoSlotEngine.SIZE_SCALE;
+    const rowCount = this.config.board.rows;
+    const pinRadius = ((24 - rowCount) / 2) * scale;
+    
+    // Maximum size the symbol can be (diameter of the peg, with slight padding)
+    const maxSize = pinRadius * 1.8;
+    
+    for (const [pegId, peg] of this.pegs) {
+      // Only render symbol for level 1 pegs
+      if (peg.level === 1) {
+        const symbolImg = this.pegSymbols.get(1);
+        if (symbolImg && symbolImg.naturalWidth > 0 && symbolImg.naturalHeight > 0) {
+          ctx.save();
+          
+          // Calculate aspect ratio and fit within the circle
+          const imgWidth = symbolImg.naturalWidth;
+          const imgHeight = symbolImg.naturalHeight;
+          const aspectRatio = imgWidth / imgHeight;
+          
+          let drawWidth: number;
+          let drawHeight: number;
+          
+          if (aspectRatio > 1) {
+            // Image is wider than tall
+            drawWidth = maxSize;
+            drawHeight = maxSize / aspectRatio;
+          } else {
+            // Image is taller than wide (or square)
+            drawHeight = maxSize;
+            drawWidth = maxSize * aspectRatio;
+          }
+          
+          // Draw the symbol centered on the peg
+          ctx.drawImage(
+            symbolImg,
+            peg.x - drawWidth / 2,
+            peg.y - drawHeight / 2,
+            drawWidth,
+            drawHeight
+          );
+          
+          ctx.restore();
+        }
+      }
+    }
+  }
+  
+  /**
+   * Render expanding ring effects on peg hits.
+   */
+  private renderRingEffects(): void {
+    const now = Date.now();
+    const ctx = this.ctx;
+    const scale = PlinkoSlotEngine.SIZE_SCALE;
+    
+    // Filter out expired effects and render active ones
+    this.ringEffects = this.ringEffects.filter(effect => {
+      const elapsed = now - effect.startTime - effect.delay;
+      
+      // Not started yet (delayed)
+      if (elapsed < 0) return true;
+      
+      const progress = elapsed / effect.duration;
+      
+      if (progress >= 1) {
+        return false; // Remove expired effect
+      }
+      
+      // Ease out cubic for satisfying deceleration
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      
+      // Calculate ring properties based on whether it's inner or outer ring
+      const baseStartRadius = effect.isOuter ? 12 * scale : 8 * scale;
+      const baseEndRadius = effect.isOuter ? 40 * scale : 28 * scale;
+      const radius = baseStartRadius + (baseEndRadius - baseStartRadius) * easeOut;
+      
+      // Alpha with smooth fade
+      const baseAlpha = effect.isOuter ? 0.5 : 0.8;
+      const alpha = baseAlpha * (1 - easeOut);
+      
+      // Line width - thicker for inner ring, thins as it expands
+      const baseLineWidth = effect.isOuter ? 2 : 3.5;
+      const lineWidth = baseLineWidth * scale * (1 - progress * 0.6);
+      
+      // Draw the ring
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = effect.color;
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = lineWidth;
+      ctx.stroke();
+      
+      // Add subtle glow for the inner ring at the start
+      if (!effect.isOuter && progress < 0.3) {
+        const glowAlpha = 0.3 * (1 - progress / 0.3);
+        ctx.globalAlpha = glowAlpha;
+        ctx.shadowColor = effect.color;
+        ctx.shadowBlur = 15 * scale;
+        ctx.stroke();
+      }
+      
+      ctx.restore();
+      
+      return true; // Keep this effect
+    });
   }
 
   /**
@@ -206,13 +385,14 @@ export class PlinkoSlotEngine {
     this.pegBodies.clear();
     this.walls = [];
 
-    const { WIDTH, HEIGHT, PADDING_X, PADDING_TOP, PADDING_BOTTOM } = PlinkoSlotEngine;
+    const { WIDTH, HEIGHT, PADDING_X, PADDING_TOP, PADDING_BOTTOM, SIZE_SCALE } = PlinkoSlotEngine;
     const rowCount = this.config.board.rows;
     
     // Calculate spacing
     const lastRowPinCount = 3 + rowCount - 1;
     const pinDistanceX = (WIDTH - PADDING_X * 2) / (lastRowPinCount - 1);
-    const pinRadius = (24 - rowCount) / 2;
+    // Base radius scaled up for larger visuals
+    const pinRadius = ((24 - rowCount) / 2) * SIZE_SCALE;
 
     // Store last row X coords for bin detection
     const lastRowXCoords: number[] = [];
@@ -236,6 +416,7 @@ export class PlinkoSlotEngine {
           col,
           level: 0,
           hitMask: 0,
+          hitCount: 0,
           x: colX,
           y: rowY,
         };
@@ -399,20 +580,19 @@ export class PlinkoSlotEngine {
 
     // Mark this ball as having hit the peg
     peg.hitMask |= ballBit;
+    peg.hitCount++;
     
-    // Level up the peg (max 10)
-    if (peg.level < this.config.board.maxPegLevel) {
-      peg.level++;
-      
-      // Update visual
-      this.updatePegVisual(pegId, peg.level);
-      
-      // Record in ball's hit list
+    // Add ring effect for the hit (always show, even for first peg)
+    this.addRingEffect(peg.x, peg.y, this.config.pegColors['0']);
+    
+    // First peg (top row middle) never changes color - every ball hits it
+    if (pegId === PlinkoSlotEngine.FIRST_PEG_ID) {
+      // Still record the hit but don't change level
       const ball = this.runState.balls[ballId - 1];
       if (ball) {
         ball.pegsHit.push(pegId);
       }
-
+      
       // Record in replay log
       if (this.replayLog) {
         this.replayLog.collisions.push({
@@ -422,10 +602,81 @@ export class PlinkoSlotEngine {
           newPegLevel: peg.level,
         });
       }
-
-      // Callback
+      
+      // Callback with level 0
       this.callbacks.onPegHit?.(pegId, peg.level, ballId);
+      return;
     }
+    
+    // Calculate level based on hit count (need 3 hits for first color)
+    // hitCount 1,2 -> level 0
+    // hitCount 3 -> level 1
+    // hitCount 4 -> level 2, etc.
+    const newLevel = Math.max(0, peg.hitCount - (PlinkoSlotEngine.HITS_FOR_FIRST_COLOR - 1));
+    const cappedLevel = Math.min(newLevel, this.config.board.maxPegLevel);
+    
+    // Only update if level actually changed
+    if (cappedLevel > peg.level) {
+      peg.level = cappedLevel;
+      
+      // Update visual with colored ring effect
+      this.updatePegVisual(pegId, peg.level);
+      
+      // Update ring color to match new peg color
+      if (this.ringEffects.length > 0) {
+        const lastRing = this.ringEffects[this.ringEffects.length - 1];
+        lastRing.color = this.config.pegColors[peg.level.toString()] ?? this.config.pegColors['0'];
+      }
+    }
+    
+    // Record in ball's hit list
+    const ball = this.runState.balls[ballId - 1];
+    if (ball) {
+      ball.pegsHit.push(pegId);
+    }
+
+    // Record in replay log
+    if (this.replayLog) {
+      this.replayLog.collisions.push({
+        ballId,
+        pegId,
+        timestamp: Date.now(),
+        newPegLevel: peg.level,
+      });
+    }
+
+    // Callback
+    this.callbacks.onPegHit?.(pegId, peg.level, ballId);
+  }
+  
+  /**
+   * Add a ring effect at the specified position.
+   * Creates multiple rings for a more satisfying visual.
+   */
+  private addRingEffect(x: number, y: number, color: string): void {
+    const now = Date.now();
+    
+    // Inner ring - faster, more prominent
+    this.ringEffects.push({
+      x,
+      y,
+      startTime: now,
+      duration: 400,
+      color,
+      isOuter: false,
+      delay: 0,
+    });
+    
+    // Outer ring - slightly delayed, slower expansion
+    this.ringEffects.push({
+      x,
+      y,
+      startTime: now,
+      duration: 500,
+      color,
+      isOuter: true,
+      delay: 50,
+    });
   }
 
   /**
@@ -435,18 +686,29 @@ export class PlinkoSlotEngine {
     const body = this.pegBodies.get(pegId);
     if (!body) return;
 
-    const color = this.config.pegColors[level.toString()] ?? this.config.pegColors['0'];
-    body.render.fillStyle = color;
+    const scale = PlinkoSlotEngine.SIZE_SCALE;
+    
+    // Level 1: Keep gray color, SVG symbol will be drawn on top
+    // Level 2+: Use colored circles
+    if (level === 1) {
+      // Keep default gray color for level 1 (SVG will be rendered on top)
+      body.render.fillStyle = this.config.pegColors['0'];
+      body.render.strokeStyle = undefined;
+      body.render.lineWidth = 0;
+    } else {
+      const color = this.config.pegColors[level.toString()] ?? this.config.pegColors['0'];
+      body.render.fillStyle = color;
 
-    // Add glow effect for high levels
-    if (level >= this.config.pegGlow.thresholdStrong) {
-      // Strong glow for level 10
-      body.render.strokeStyle = '#FFFFFF';
-      body.render.lineWidth = 3;
-    } else if (level >= this.config.pegGlow.thresholdSoft) {
-      // Soft glow for level 6+
-      body.render.strokeStyle = color;
-      body.render.lineWidth = 2;
+      // Add glow effect for high levels (scaled for larger pegs)
+      if (level >= this.config.pegGlow.thresholdStrong) {
+        // Strong glow for level 10
+        body.render.strokeStyle = '#FFFFFF';
+        body.render.lineWidth = 4 * scale;
+      } else if (level >= this.config.pegGlow.thresholdSoft) {
+        // Soft glow for level 6+
+        body.render.strokeStyle = color;
+        body.render.lineWidth = 3 * scale;
+      }
     }
   }
 
@@ -564,7 +826,7 @@ export class PlinkoSlotEngine {
 
     // Create physics body
     const rowCount = this.config.board.rows;
-    const ballRadius = ((24 - rowCount) / 2) * 2;
+    const ballRadius = ((24 - rowCount) / 2) * PlinkoSlotEngine.SIZE_SCALE * 1.5;
     
     const body = Matter.Bodies.circle(spawnX, spawnY, ballRadius, {
       restitution: this.config.physics.restitution,
@@ -572,7 +834,7 @@ export class PlinkoSlotEngine {
       frictionAir: this.config.physics.frictionAir,
       label: `ball-${ballId}`,
       render: {
-        fillStyle: '#A3E635', // Lime green
+        fillStyle: '#FF1344',
       },
       collisionFilter: {
         category: CATEGORY_BALL,
@@ -630,6 +892,7 @@ export class PlinkoSlotEngine {
         id: p.id,
         level: p.level,
         hitMask: p.hitMask,
+        hitCount: p.hitCount,
       }));
       this.replayLog.payoutResult = payoutResult;
     }
@@ -655,6 +918,7 @@ export class PlinkoSlotEngine {
     for (const [pegId, peg] of this.pegs) {
       peg.level = 0;
       peg.hitMask = 0;
+      peg.hitCount = 0;
       
       const body = this.pegBodies.get(pegId);
       if (body) {
@@ -669,6 +933,9 @@ export class PlinkoSlotEngine {
       clearTimeout(this.ballDropTimer);
       this.ballDropTimer = null;
     }
+    
+    // Clear ring effects
+    this.ringEffects = [];
   }
 
   /**
@@ -725,6 +992,7 @@ export class PlinkoSlotEngine {
       if (peg) {
         peg.level = pegData.level;
         peg.hitMask = pegData.hitMask;
+        peg.hitCount = pegData.hitCount ?? 0;
         this.updatePegVisual(pegData.id, pegData.level);
       }
     }

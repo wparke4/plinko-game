@@ -3,7 +3,7 @@
   "description": "Plinko Slot paytable configuration. Adjust values to control RTP.",
   
   "board": {
-    "rows": 12,
+    "rows": 6,
     "ballCount": 10,
     "maxPegLevel": 10
   },
