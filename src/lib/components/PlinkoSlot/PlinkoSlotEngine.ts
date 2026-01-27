@@ -31,6 +31,9 @@ import heartSvg from '$lib/assets/slot/heart.svg';
 import starSvg from '$lib/assets/slot/star.svg';
 import gemSvg from '$lib/assets/slot/gem.svg';
 import diamondSvg from '$lib/assets/slot/diamond.svg';
+import strawberrySvg from '$lib/assets/slot/strawberry.svg';
+import moneySvg from '$lib/assets/slot/money.svg';
+import sunSvg from '$lib/assets/slot/sun.svg';
 
 // Collision categories
 const CATEGORY_PIN = 0x0001;
@@ -116,7 +119,7 @@ export class PlinkoSlotEngine {
   }> = [];
   private currentCelebrationIndex = -1;
   private celebrationStartTime = 0;
-  private static readonly CELEBRATION_DURATION = 900; // ms per win celebration (fast)
+  private static readonly CELEBRATION_DURATION = 1125; // ms per win celebration
   
   // Sparkle particle system
   private sparkles: Array<{
@@ -144,14 +147,16 @@ export class PlinkoSlotEngine {
     color: string;
     payouts: Record<number, number>; // count -> multiplier
   }> = [
-    { id: 1, name: 'Orange',     color: '#FF8C00', payouts: { 3: 0.5, 4: 1, 5: 2, 6: 4, 7: 8, 8: 16 } },
-    { id: 2, name: 'Watermelon', color: '#FF6B6B', payouts: { 3: 0.75, 4: 1.5, 5: 3, 6: 6, 7: 12, 8: 24 } },
-    { id: 3, name: 'Bear',       color: '#8B4513', payouts: { 3: 1, 4: 2, 5: 4, 6: 8, 7: 16, 8: 32 } },
-    { id: 4, name: 'Heart',      color: '#FF1493', payouts: { 3: 1.5, 4: 3, 5: 6, 6: 12, 7: 24, 8: 48 } },
-    { id: 5, name: 'Star',       color: '#FFD700', payouts: { 3: 2, 4: 4, 5: 8, 6: 16, 7: 32, 8: 64 } },
-    { id: 6, name: 'Gem',        color: '#00CED1', payouts: { 3: 3, 4: 6, 5: 12, 6: 24, 7: 48, 8: 96 } },
-    { id: 7, name: 'Diamond',    color: '#E0E0FF', payouts: { 3: 5, 4: 10, 5: 20, 6: 40, 7: 80, 8: 160 } },
-    // Add more symbols here! Just add a new entry with id, name, color, and payouts
+    { id: 1, name: 'Orange',     color: '#FF8C00', payouts: { 4: 0.25, 5: 0.5, 6: 1, 7: 2, 8: 4 } },
+    { id: 2, name: 'Watermelon', color: '#FF6B6B', payouts: { 4: 0.25, 5: 0.5, 6: 1, 7: 2, 8: 4 } },
+    { id: 3, name: 'Bear',       color: '#8B4513', payouts: { 4: 0.25, 5: 0.5, 6: 1, 7: 2, 8: 4 } },
+    { id: 4, name: 'Heart',      color: '#FF1493', payouts: { 4: 0.25, 5: 0.5, 6: 1, 7: 2, 8: 4 } },
+    { id: 5, name: 'Star',       color: '#FFD700', payouts: { 4: 0.25, 5: 0.5, 6: 1, 7: 2, 8: 4 } },
+    { id: 6, name: 'Gem',        color: '#00CED1', payouts: { 4: 0.25, 5: 0.5, 6: 1, 7: 2, 8: 4 } },
+    { id: 7, name: 'Strawberry', color: '#FF4466', payouts: { 4: 0.25, 5: 0.5, 6: 1, 7: 2, 8: 4 } },
+    { id: 8, name: 'Money',      color: '#22C55E', payouts: { 4: 0.25, 5: 0.5, 6: 1, 7: 2, 8: 4 } },
+    { id: 9, name: 'Sun',        color: '#FBBF24', payouts: { 4: 0.25, 5: 0.5, 6: 1, 7: 2, 8: 4 } },
+    { id: 10, name: 'Diamond',   color: '#E0E0FF', payouts: { 4: 1, 5: 2, 6: 4, 7: 8, 8: 16 } },
   ];
   
   // Helper to get symbol by ID
@@ -249,7 +254,10 @@ export class PlinkoSlotEngine {
       [4, heartSvg],
       [5, starSvg],
       [6, gemSvg],
-      [7, diamondSvg],
+      [7, strawberrySvg],
+      [8, moneySvg],
+      [9, sunSvg],
+      [10, diamondSvg],
     ];
     
     let loadedCount = 0;
@@ -466,7 +474,7 @@ export class PlinkoSlotEngine {
     // Check for wins (3+ of same symbol)
     for (const [level, pegIds] of symbolPegs) {
       const count = pegIds.length;
-      if (count >= 3) {
+      if (count >= 4) {
         const payoutTable = PlinkoSlotEngine.getSymbolPayouts(level);
         // Get the multiplier for this count (cap at max defined)
         const maxCount = Math.min(count, 8);

@@ -19,6 +19,9 @@
   import starSvg from '$lib/assets/slot/star.svg';
   import gemSvg from '$lib/assets/slot/gem.svg';
   import diamondSvg from '$lib/assets/slot/diamond.svg';
+  import strawberrySvg from '$lib/assets/slot/strawberry.svg';
+  import moneySvg from '$lib/assets/slot/money.svg';
+  import sunSvg from '$lib/assets/slot/sun.svg';
   
   const SYMBOL_SVGS: Record<number, string> = {
     1: orangeSvg,
@@ -27,7 +30,10 @@
     4: heartSvg,
     5: starSvg,
     6: gemSvg,
-    7: diamondSvg,
+    7: strawberrySvg,
+    8: moneySvg,
+    9: sunSvg,
+    10: diamondSvg,
   };
   
   const SYMBOL_NAMES: Record<number, string> = {
@@ -37,7 +43,10 @@
     4: 'Heart',
     5: 'Star',
     6: 'Gem',
-    7: 'Diamond',
+    7: 'Strawberry',
+    8: 'Money',
+    9: 'Sun',
+    10: 'Diamond',
   };
   
   const config = paytable as PaytableConfig;
