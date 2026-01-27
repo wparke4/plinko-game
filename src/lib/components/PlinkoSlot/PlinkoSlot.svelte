@@ -215,22 +215,11 @@
   }
 </script>
 
-<div class="flex flex-col h-screen bg-black">
-  <!-- Header -->
-  <header class="flex items-center justify-between py-4 px-6 bg-neutral-900 shadow-lg shadow-black/30 relative z-10">
-    <div class="flex items-center gap-4">
-      <h1 class="text-xl font-bold text-white">Plinko Slot</h1>
-      <span class="px-2 py-1 bg-purple-600 rounded text-xs font-medium text-white">10-Ball Run</span>
-    </div>
-    
-    <div class="flex items-center border border-green-800 rounded-lg overflow-hidden">
-      <span class="text-sm font-medium text-neutral-400 uppercase tracking-wide px-4 py-2">Wallet</span>
-      <span class="text-lg font-semibold text-white px-4 py-2 bg-neutral-800 border-l border-green-800">
-        ${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-      </span>
-    </div>
-    
-    <div class="flex items-center gap-2">
+<div class="flex h-screen bg-black">
+  <!-- Left Sidebar: Controls -->
+  <div class="w-72 flex flex-col bg-neutral-950 border-r border-neutral-800 p-4 overflow-y-auto">
+    <!-- Settings buttons at top -->
+    <div class="flex items-center justify-end gap-2 mb-4">
       <button
         onclick={() => showInfoModal = true}
         class="p-2 text-neutral-500 hover:text-neutral-300 transition-colors"
@@ -246,106 +235,110 @@
         <Gear class="w-5 h-5" />
       </button>
     </div>
-  </header>
 
-  <!-- Main Content -->
-  <div class="flex flex-1 min-h-0">
-    <!-- Left Sidebar: Controls -->
-    <div class="w-72 flex flex-col bg-neutral-950 border-r border-neutral-800 p-4 overflow-y-auto">
-      <!-- Bet Amount -->
-      <div class="mb-6">
-        <label class="text-sm font-medium text-neutral-400 uppercase tracking-wide">Bet Amount</label>
-        <div class="relative mt-2">
-          <span class="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-neutral-500">$</span>
-          <input
-            type="number"
-            bind:value={betAmount}
-            min="1"
-            step="10"
-            disabled={isRunning}
-            class="w-full rounded-lg bg-neutral-800 border border-neutral-700 pl-8 pr-4 py-3 text-white text-lg font-medium focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 disabled:opacity-50 transition-colors"
-          />
-        </div>
-        <div class="flex gap-2 mt-2">
-          {#each [10, 50, 100, 500] as preset}
-            <button
-              onclick={() => betAmount = preset}
-              disabled={isRunning}
-              class="flex-1 py-1 text-sm rounded bg-neutral-800 border border-neutral-700 text-neutral-400 hover:bg-neutral-700 hover:text-white disabled:opacity-50 transition-colors"
-            >
-              ${preset}
-            </button>
-          {/each}
+    <!-- Balance -->
+    <div class="mb-6">
+      <label class="text-sm font-medium text-neutral-400 uppercase tracking-wide">Balance</label>
+      <div class="relative mt-2">
+        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-neutral-500">$</span>
+        <div class="w-full rounded-lg bg-neutral-800 border border-neutral-700 pl-8 pr-4 py-3 text-white text-lg font-medium">
+          {balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </div>
       </div>
+    </div>
 
-      <!-- Play Button -->
-      <button
-        onclick={handlePlay}
-        disabled={!canPlay}
-        class="w-full rounded-lg bg-green-500 py-4 text-lg font-bold text-slate-900 transition-all hover:bg-green-400 active:bg-green-600 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed mb-6"
-      >
-        Play
-      </button>
-
-      <!-- Spacer to push wins to bottom -->
-      <div class="flex-1"></div>
-
-      <!-- Individual Wins Display (at bottom) -->
-      <div class="min-h-[280px] flex flex-col justify-end gap-2">
-        {#each [...winEntries].reverse() as entry (entry.id)}
-          <div 
-            class="win-entry flex items-center justify-between p-3 bg-neutral-900 border border-neutral-700 rounded-lg overflow-hidden
-              {entry.isNew ? 'win-entry-new' : ''}"
+    <!-- Bet Amount -->
+    <div class="mb-6">
+      <label class="text-sm font-medium text-neutral-400 uppercase tracking-wide">Bet Amount</label>
+      <div class="relative mt-2">
+        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-neutral-500">$</span>
+        <input
+          type="number"
+          bind:value={betAmount}
+          min="1"
+          step="10"
+          disabled={isRunning}
+          class="w-full rounded-lg bg-neutral-800 border border-neutral-700 pl-8 pr-4 py-3 text-white text-lg font-medium focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 disabled:opacity-50 transition-colors"
+        />
+      </div>
+      <div class="flex gap-2 mt-2">
+        {#each [10, 50, 100, 500] as preset}
+          <button
+            onclick={() => betAmount = preset}
+            disabled={isRunning}
+            class="flex-1 py-1 text-sm rounded bg-neutral-800 border border-neutral-700 text-neutral-400 hover:bg-neutral-700 hover:text-white disabled:opacity-50 transition-colors"
           >
-            <!-- Left side: count + symbol -->
-            <div class="flex items-center gap-2">
-              <span class="text-xl font-bold text-white">{entry.count}</span>
-              <img 
-                src={SYMBOL_SVGS[entry.symbolLevel]} 
-                alt={SYMBOL_NAMES[entry.symbolLevel]}
-                class="w-8 h-8 object-contain"
-              />
-            </div>
-            
-            <!-- Right side: payout amount -->
-            <div class="text-lg font-bold text-green-400">
-              ${entry.payout.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </div>
-            
-            <!-- Sparkle particles overlay -->
-            {#if entry.isNew}
-              <div class="sparkle-container">
-                {#each Array(12) as _, i}
-                  <div 
-                    class="sparkle" 
-                    style="--delay: {i * 50}ms; --x: {Math.random() * 100}%; --y: {Math.random() * 100}%;"
-                  ></div>
-                {/each}
-              </div>
-            {/if}
-          </div>
+            ${preset}
+          </button>
         {/each}
       </div>
     </div>
 
-    <!-- Center: Game Board -->
-    <div class="flex-1 flex flex-col items-center justify-center bg-black p-4">
-      <div class="relative" style:width="{WIDTH}px" style:height="{HEIGHT}px">
-        {#if engine === null}
-          <div class="absolute inset-0 flex items-center justify-center">
-            <CircleNotch class="w-16 h-16 animate-spin text-neutral-600" weight="bold" />
-          </div>
-        {/if}
-        <canvas
-          use:initEngine
-          width={WIDTH}
-          height={HEIGHT}
-          class="rounded-lg shadow-2xl"
-        ></canvas>
-      </div>
-    </div>
+    <!-- Play Button -->
+    <button
+      onclick={handlePlay}
+      disabled={!canPlay}
+      class="w-full rounded-lg bg-green-500 py-4 text-lg font-bold text-slate-900 transition-all hover:bg-green-400 active:bg-green-600 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed mb-6"
+    >
+      Play
+    </button>
 
+    <!-- Spacer to push wins to bottom -->
+    <div class="flex-1"></div>
+
+    <!-- Individual Wins Display (at bottom) -->
+    <div class="min-h-[280px] flex flex-col justify-end gap-2">
+      {#each [...winEntries].reverse() as entry (entry.id)}
+        <div 
+          class="win-entry flex items-center justify-between p-3 bg-neutral-900 border border-neutral-700 rounded-lg overflow-hidden
+            {entry.isNew ? 'win-entry-new' : ''}"
+        >
+          <!-- Left side: count + symbol -->
+          <div class="flex items-center gap-2">
+            <span class="text-xl font-bold text-white">{entry.count}</span>
+            <img 
+              src={SYMBOL_SVGS[entry.symbolLevel]} 
+              alt={SYMBOL_NAMES[entry.symbolLevel]}
+              class="w-8 h-8 object-contain"
+            />
+          </div>
+          
+          <!-- Right side: payout amount -->
+          <div class="text-lg font-bold text-green-400">
+            ${entry.payout.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          
+          <!-- Sparkle particles overlay -->
+          {#if entry.isNew}
+            <div class="sparkle-container">
+              {#each Array(12) as _, i}
+                <div 
+                  class="sparkle" 
+                  style="--delay: {i * 50}ms; --x: {Math.random() * 100}%; --y: {Math.random() * 100}%;"
+                ></div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/each}
+    </div>
+  </div>
+
+  <!-- Center: Game Board -->
+  <div class="flex-1 flex flex-col items-center justify-center bg-black p-4">
+    <div class="relative" style:width="{WIDTH}px" style:height="{HEIGHT}px">
+      {#if engine === null}
+        <div class="absolute inset-0 flex items-center justify-center">
+          <CircleNotch class="w-16 h-16 animate-spin text-neutral-600" weight="bold" />
+        </div>
+      {/if}
+      <canvas
+        use:initEngine
+        width={WIDTH}
+        height={HEIGHT}
+        class="rounded-lg shadow-2xl"
+      ></canvas>
+    </div>
   </div>
 </div>
 
