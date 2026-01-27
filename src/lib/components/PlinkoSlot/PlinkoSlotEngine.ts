@@ -115,6 +115,24 @@ export class PlinkoSlotEngine {
   private celebrationStartTime = 0;
   private static readonly CELEBRATION_DURATION = 1500; // ms per win celebration
   
+  // Sparkle particle system
+  private sparkles: Array<{
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    size: number;
+    alpha: number;
+    color: string;
+    rotation: number;
+    rotationSpeed: number;
+    birthTime: number;
+    lifetime: number;
+    twinkleOffset: number; // For glistening effect
+  }> = [];
+  private lastSparkleSpawn = 0;
+  private static readonly SPARKLE_SPAWN_RATE = 25; // ms between spawns per peg
+  
   // Symbol payouts (multipliers based on count) - min 3 to win
   private static readonly SYMBOL_PAYOUTS: Record<number, Record<number, number>> = {
     // level: { count: multiplier }
@@ -248,7 +266,162 @@ export class PlinkoSlotEngine {
     // Use afterRender to draw SVG symbols on top of pegs
     Matter.Events.on(this.render, 'afterRender', () => {
       this.renderPegSymbols();
+      this.updateAndRenderSparkles();
       this.renderWinCelebrations();
+    });
+  }
+  
+  /**
+   * Spawn sparkle particles around winning pegs.
+   */
+  private spawnCelebrationSparkles(): void {
+    if (this.currentCelebrationIndex < 0 || this.currentCelebrationIndex >= this.winCelebrations.length) {
+      return;
+    }
+    
+    const now = Date.now();
+    const celebration = this.winCelebrations[this.currentCelebrationIndex];
+    const elapsed = now - celebration.startTime;
+    
+    // Don't spawn in the last 400ms (let existing sparkles fade out)
+    if (elapsed > celebration.duration - 400) return;
+    
+    // Check spawn rate
+    if (now - this.lastSparkleSpawn < PlinkoSlotEngine.SPARKLE_SPAWN_RATE) return;
+    this.lastSparkleSpawn = now;
+    
+    const symbolColor = PlinkoSlotEngine.SYMBOL_COLORS[celebration.symbolLevel] ?? '#FFFFFF';
+    const scale = PlinkoSlotEngine.SIZE_SCALE;
+    const rowCount = this.config.board.rows;
+    const pinRadius = ((24 - rowCount) / 2) * scale;
+    
+    // Spawn 1-2 sparkles per winning peg
+    for (const pegId of celebration.pegIds) {
+      const peg = this.pegs.get(pegId);
+      if (!peg) continue;
+      
+      const sparkleCount = Math.random() < 0.5 ? 1 : 2;
+      
+      for (let i = 0; i < sparkleCount; i++) {
+        // Random position around the peg
+        const angle = Math.random() * Math.PI * 2;
+        const distance = pinRadius * (0.5 + Math.random() * 1.5);
+        const x = peg.x + Math.cos(angle) * distance;
+        const y = peg.y + Math.sin(angle) * distance;
+        
+        // Random velocity (mostly upward with some spread)
+        const speed = 0.3 + Math.random() * 0.8;
+        const velAngle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.8; // Upward bias
+        const vx = Math.cos(velAngle) * speed;
+        const vy = Math.sin(velAngle) * speed;
+        
+        // Pick color: mix of white, gold, and symbol color
+        const colorRoll = Math.random();
+        let color: string;
+        if (colorRoll < 0.4) {
+          color = '#FFFFFF'; // White sparkles
+        } else if (colorRoll < 0.7) {
+          color = '#FFD700'; // Gold sparkles
+        } else {
+          color = symbolColor; // Symbol-colored sparkles
+        }
+        
+        this.sparkles.push({
+          x,
+          y,
+          vx,
+          vy,
+          size: 2 + Math.random() * 4,
+          alpha: 0.8 + Math.random() * 0.2,
+          color,
+          rotation: Math.random() * Math.PI * 2,
+          rotationSpeed: (Math.random() - 0.5) * 0.3,
+          birthTime: now,
+          lifetime: 600 + Math.random() * 600, // 600-1200ms
+          twinkleOffset: Math.random() * Math.PI * 2,
+        });
+      }
+    }
+  }
+  
+  /**
+   * Update and render sparkle particles.
+   */
+  private updateAndRenderSparkles(): void {
+    const now = Date.now();
+    const ctx = this.ctx;
+    
+    // Spawn new sparkles if celebrating
+    this.spawnCelebrationSparkles();
+    
+    // Update and render sparkles
+    this.sparkles = this.sparkles.filter(sparkle => {
+      const age = now - sparkle.birthTime;
+      if (age >= sparkle.lifetime) {
+        return false; // Remove expired sparkle
+      }
+      
+      // Update position
+      sparkle.x += sparkle.vx;
+      sparkle.y += sparkle.vy;
+      sparkle.vy += 0.01; // Slight gravity
+      sparkle.rotation += sparkle.rotationSpeed;
+      
+      // Calculate alpha with twinkle effect
+      const lifeProgress = age / sparkle.lifetime;
+      const fadeAlpha = lifeProgress < 0.2 
+        ? lifeProgress / 0.2 // Fade in
+        : 1 - ((lifeProgress - 0.2) / 0.8); // Fade out
+      
+      // Glistening twinkle effect
+      const twinkle = 0.5 + 0.5 * Math.sin(age * 0.02 + sparkle.twinkleOffset);
+      const finalAlpha = sparkle.alpha * fadeAlpha * (0.4 + twinkle * 0.6);
+      
+      // Calculate size with slight pulse
+      const sizePulse = 1 + 0.3 * Math.sin(age * 0.015 + sparkle.twinkleOffset);
+      const finalSize = sparkle.size * sizePulse * (1 - lifeProgress * 0.3);
+      
+      // Draw the sparkle (4-point star shape)
+      ctx.save();
+      ctx.translate(sparkle.x, sparkle.y);
+      ctx.rotate(sparkle.rotation);
+      ctx.globalAlpha = finalAlpha;
+      
+      // Draw a 4-point star
+      ctx.fillStyle = sparkle.color;
+      ctx.beginPath();
+      
+      const outerRadius = finalSize;
+      const innerRadius = finalSize * 0.3;
+      
+      for (let i = 0; i < 8; i++) {
+        const radius = i % 2 === 0 ? outerRadius : innerRadius;
+        const angle = (i * Math.PI) / 4;
+        const px = Math.cos(angle) * radius;
+        const py = Math.sin(angle) * radius;
+        
+        if (i === 0) {
+          ctx.moveTo(px, py);
+        } else {
+          ctx.lineTo(px, py);
+        }
+      }
+      ctx.closePath();
+      ctx.fill();
+      
+      // Add a bright center glow
+      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, finalSize * 0.5);
+      gradient.addColorStop(0, '#FFFFFF');
+      gradient.addColorStop(1, sparkle.color + '00');
+      ctx.globalAlpha = finalAlpha * 0.8;
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(0, 0, finalSize * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.restore();
+      
+      return true; // Keep this sparkle
     });
   }
   
@@ -365,10 +538,10 @@ export class PlinkoSlotEngine {
     const pinRadius = ((24 - rowCount) / 2) * scale;
     const symbolColor = PlinkoSlotEngine.SYMBOL_COLORS[celebration.symbolLevel] ?? '#FFFFFF';
     
-    // Pulsing effect (sine wave)
+    // Pulsing effect for SYMBOL ONLY (sine wave) - more dramatic scaling
     const pulseFrequency = 3; // pulses per celebration
     const pulsePhase = Math.sin(progress * Math.PI * 2 * pulseFrequency);
-    const pulseScale = 1 + 0.15 * pulsePhase; // 15% scale variation
+    const symbolPulseScale = 1 + 0.5 * pulsePhase; // 50% scale variation for symbol
     
     // Glow intensity (starts strong, fades slightly, then strong at end)
     const glowIntensity = 0.6 + 0.4 * Math.sin(progress * Math.PI);
@@ -379,8 +552,8 @@ export class PlinkoSlotEngine {
       
       ctx.save();
       
-      // Draw outer glow
-      const glowRadius = pinRadius * 2.5 * pulseScale;
+      // Draw outer glow (fixed size, no pulsing)
+      const glowRadius = pinRadius * 2.5;
       const gradient = ctx.createRadialGradient(
         peg.x, peg.y, pinRadius * 0.5,
         peg.x, peg.y, glowRadius
@@ -395,18 +568,20 @@ export class PlinkoSlotEngine {
       ctx.arc(peg.x, peg.y, glowRadius, 0, Math.PI * 2);
       ctx.fill();
       
-      // Draw highlight ring
+      // Draw highlight ring (fixed size, no pulsing)
       ctx.globalAlpha = 0.8 * glowIntensity;
       ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = 3 * scale * pulseScale;
+      ctx.lineWidth = 3 * scale;
       ctx.beginPath();
-      ctx.arc(peg.x, peg.y, pinRadius * 1.3 * pulseScale, 0, Math.PI * 2);
+      ctx.arc(peg.x, peg.y, pinRadius * 1.3, 0, Math.PI * 2);
       ctx.stroke();
       
-      // Draw scaled symbol on top
+      // Draw scaled symbol on top - this is what pulses!
       const symbolImg = this.pegSymbols.get(celebration.symbolLevel);
       if (symbolImg && symbolImg.naturalWidth > 0) {
-        const maxSize = pinRadius * 1.8 * pulseScale;
+        // Base size is larger, then apply pulse scaling
+        const baseSize = pinRadius * 2.2; // Larger base size
+        const maxSize = baseSize * symbolPulseScale;
         const aspectRatio = symbolImg.naturalWidth / symbolImg.naturalHeight;
         
         let drawWidth: number;
@@ -1188,6 +1363,9 @@ export class PlinkoSlotEngine {
     // Clear win celebrations
     this.winCelebrations = [];
     this.currentCelebrationIndex = -1;
+    
+    // Clear sparkles
+    this.sparkles = [];
   }
 
   /**

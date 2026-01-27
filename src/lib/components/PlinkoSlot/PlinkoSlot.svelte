@@ -7,12 +7,38 @@
   import type { Action } from 'svelte/action';
   
   import PlinkoSlotEngine from './PlinkoSlotEngine';
-  import ResultsPanel from './ResultsPanel.svelte';
-  import BallProgress from './BallProgress.svelte';
   import ProvablyFairPanel from './ProvablyFairPanel.svelte';
-  import RunHistory from './RunHistory.svelte';
   import paytable from './paytable.json';
-  import type { PayoutResult, RunHistoryEntry, Peg, PaytableConfig } from './types';
+  import type { PayoutResult, PaytableConfig } from './types';
+  
+  // Import symbol SVGs for the win display
+  import orangeSvg from '$lib/assets/slot/orange.svg';
+  import watermelonSvg from '$lib/assets/slot/watermelon.svg';
+  import bearSvg from '$lib/assets/slot/bear.svg';
+  import heartSvg from '$lib/assets/slot/heart.svg';
+  import starSvg from '$lib/assets/slot/star.svg';
+  import gemSvg from '$lib/assets/slot/gem.svg';
+  import diamondSvg from '$lib/assets/slot/diamond.svg';
+  
+  const SYMBOL_SVGS: Record<number, string> = {
+    1: orangeSvg,
+    2: watermelonSvg,
+    3: bearSvg,
+    4: heartSvg,
+    5: starSvg,
+    6: gemSvg,
+    7: diamondSvg,
+  };
+  
+  const SYMBOL_NAMES: Record<number, string> = {
+    1: 'Orange',
+    2: 'Watermelon',
+    3: 'Bear',
+    4: 'Heart',
+    5: 'Star',
+    6: 'Gem',
+    7: 'Diamond',
+  };
   
   const config = paytable as PaytableConfig;
   const { WIDTH, HEIGHT } = PlinkoSlotEngine;
@@ -27,7 +53,18 @@
   let currentBall = $state(0);
   let exitedBalls = $state<number[]>([]);
   let payoutResult = $state<PayoutResult | null>(null);
-  let runHistory = $state<RunHistoryEntry[]>([]);
+  
+  // Individual win entries for the payout display
+  interface WinEntry {
+    id: number;
+    symbolLevel: number;
+    count: number;
+    multiplier: number;
+    payout: number;
+    isNew: boolean; // For spawn animation
+  }
+  let winEntries = $state<WinEntry[]>([]);
+  let winEntryIdCounter = 0;
   
   // Provably fair state
   let fairState = $state({
@@ -42,10 +79,12 @@
   let showFairModal = $state(false);
   let showInfoModal = $state(false);
   let settingsBalance = $state(10000);
+  let isCelebrating = $state(false);
+  let currentCelebration = $state<{ symbolLevel: number; count: number; multiplier: number } | null>(null);
   
   // Derived
   let isRunning = $derived(gamePhase === 'dropping' || gamePhase === 'evaluating');
-  let canPlay = $derived(!isRunning && balance >= betAmount && betAmount > 0);
+  let canPlay = $derived(!isRunning && !isCelebrating && balance >= betAmount && betAmount > 0);
   
   // Initialize engine
   const initEngine: Action<HTMLCanvasElement> = (node) => {
@@ -84,6 +123,35 @@
       },
       onPhaseChange: (phase) => {
         gamePhase = phase;
+      },
+      onWinCelebration: (symbolLevel, count, multiplier) => {
+        isCelebrating = true;
+        currentCelebration = { symbolLevel, count, multiplier };
+        
+        // Add a new win entry to the payout display
+        const payout = betAmount * multiplier;
+        const newEntry: WinEntry = {
+          id: ++winEntryIdCounter,
+          symbolLevel,
+          count,
+          multiplier,
+          payout,
+          isNew: true,
+        };
+        
+        // Add to the beginning (newest at top, but we'll reverse in display)
+        winEntries = [newEntry, ...winEntries].slice(0, 5);
+        
+        // Remove the "new" flag after animation completes
+        setTimeout(() => {
+          winEntries = winEntries.map(e => 
+            e.id === newEntry.id ? { ...e, isNew: false } : e
+          );
+        }, 600);
+      },
+      onAllCelebrationsComplete: () => {
+        isCelebrating = false;
+        currentCelebration = null;
       }
     });
     
@@ -113,6 +181,7 @@
     currentBall = 0;
     exitedBalls = [];
     payoutResult = null;
+    winEntries = []; // Reset win entries for new game
     
     // Deduct bet
     balance -= betAmount;
@@ -228,10 +297,12 @@
         onclick={handlePlay}
         disabled={!canPlay}
         class="w-full rounded-lg bg-green-500 py-4 text-lg font-bold text-slate-900 transition-all hover:bg-green-400 active:bg-green-600 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed mb-6
-          {isRunning ? 'animate-pulse' : ''}"
+          {isRunning || isCelebrating ? 'animate-pulse' : ''}"
       >
         {#if isRunning}
           Running...
+        {:else if isCelebrating}
+          Celebrating...
         {:else if gamePhase === 'complete'}
           Play Again
         {:else}
@@ -239,32 +310,44 @@
         {/if}
       </button>
 
-      <!-- Ball Progress -->
-      <div class="mb-6">
-        <BallProgress
-          totalBalls={config.board.ballCount}
-          {currentBall}
-          {exitedBalls}
-        />
-      </div>
+      <!-- Spacer to push wins to bottom -->
+      <div class="flex-1"></div>
 
-      <!-- Provably Fair Section -->
-      <div class="mb-6">
-        <button
-          onclick={() => showFairModal = true}
-          class="w-full py-2 bg-neutral-800 border border-neutral-700 rounded text-sm text-neutral-400 hover:bg-neutral-700 hover:text-white transition-colors"
-        >
-          Provably Fair Settings
-        </button>
-        <div class="mt-2 text-xs text-neutral-500 font-mono truncate">
-          Hash: {fairState.serverSeedHash.slice(0, 16)}...
-        </div>
-      </div>
-
-      <!-- Recent History -->
-      <div class="flex-1">
-        <div class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-2">Recent Runs</div>
-        <RunHistory history={runHistory} maxDisplay={5} />
+      <!-- Individual Wins Display (at bottom) -->
+      <div class="min-h-[280px] flex flex-col justify-end gap-2">
+        {#each [...winEntries].reverse() as entry (entry.id)}
+          <div 
+            class="win-entry flex items-center justify-between p-3 bg-neutral-900 border border-neutral-700 rounded-lg overflow-hidden
+              {entry.isNew ? 'win-entry-new' : ''}"
+          >
+            <!-- Left side: count + symbol -->
+            <div class="flex items-center gap-2">
+              <span class="text-xl font-bold text-white">{entry.count}</span>
+              <img 
+                src={SYMBOL_SVGS[entry.symbolLevel]} 
+                alt={SYMBOL_NAMES[entry.symbolLevel]}
+                class="w-8 h-8 object-contain"
+              />
+            </div>
+            
+            <!-- Right side: payout amount -->
+            <div class="text-lg font-bold text-green-400">
+              ${entry.payout.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            
+            <!-- Sparkle particles overlay -->
+            {#if entry.isNew}
+              <div class="sparkle-container">
+                {#each Array(12) as _, i}
+                  <div 
+                    class="sparkle" 
+                    style="--delay: {i * 50}ms; --x: {Math.random() * 100}%; --y: {Math.random() * 100}%;"
+                  ></div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/each}
       </div>
     </div>
 
@@ -285,44 +368,6 @@
       </div>
     </div>
 
-    <!-- Right Sidebar: Results -->
-    <div class="w-80 flex flex-col bg-neutral-950 border-l border-neutral-800 p-4 overflow-y-auto">
-      <div class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-4">Results</div>
-      <ResultsPanel result={payoutResult} {betAmount} />
-      
-      <!-- Paytable Summary -->
-      <div class="mt-6">
-        <div class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-2">Paytable</div>
-        <div class="bg-neutral-900 border border-neutral-700 rounded-lg p-3 space-y-1 text-sm">
-          {#each config.countPayouts.tiers.slice(0, 5) as tier}
-            <div class="flex justify-between text-neutral-400">
-              <span>{tier.countRequired}x L{tier.levelThreshold}+</span>
-              <span class="text-yellow-400">{tier.multiplier}x</span>
-            </div>
-          {/each}
-          <div class="text-xs text-neutral-500 pt-2 border-t border-neutral-700">
-            + Pattern bonuses available
-          </div>
-        </div>
-      </div>
-
-      <!-- Peg Color Legend -->
-      <div class="mt-6">
-        <div class="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-2">Peg Levels</div>
-        <div class="grid grid-cols-5 gap-1">
-          {#each Object.entries(config.pegColors).slice(1, 11) as [level, color]}
-            <div class="flex flex-col items-center">
-              <div
-                class="w-4 h-4 rounded-full"
-                style:background-color={color}
-                style:box-shadow={parseInt(level) >= 6 ? `0 0 8px ${color}` : 'none'}
-              ></div>
-              <span class="text-xs text-neutral-500 mt-1">{level}</span>
-            </div>
-          {/each}
-        </div>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -450,5 +495,90 @@
   }
   input[type="number"] {
     -moz-appearance: textfield;
+  }
+  
+  /* Win entry spawn animation */
+  .win-entry {
+    position: relative;
+    transition: all 0.3s ease;
+  }
+  
+  .win-entry-new {
+    animation: winEntrySpawn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(23, 23, 23, 1) 50%);
+    border-color: rgb(34, 197, 94);
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.4), inset 0 0 20px rgba(34, 197, 94, 0.1);
+  }
+  
+  @keyframes winEntrySpawn {
+    0% {
+      opacity: 0;
+      transform: scale(0.5) translateY(20px);
+    }
+    50% {
+      transform: scale(1.05) translateY(-5px);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+  
+  /* Sparkle particles */
+  .sparkle-container {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  
+  .sparkle {
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    width: 6px;
+    height: 6px;
+    background: white;
+    border-radius: 50%;
+    animation: sparkleAnim 0.8s ease-out var(--delay) forwards;
+    opacity: 0;
+    box-shadow: 0 0 6px 2px rgba(255, 215, 0, 0.8), 0 0 12px 4px rgba(255, 215, 0, 0.4);
+  }
+  
+  .sparkle::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 12px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, white, transparent);
+    transform: translate(-50%, -50%);
+  }
+  
+  .sparkle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 2px;
+    height: 12px;
+    background: linear-gradient(180deg, transparent, white, transparent);
+    transform: translate(-50%, -50%);
+  }
+  
+  @keyframes sparkleAnim {
+    0% {
+      opacity: 0;
+      transform: scale(0) rotate(0deg);
+    }
+    20% {
+      opacity: 1;
+      transform: scale(1.5) rotate(45deg);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(0.5) rotate(180deg) translateY(-30px);
+    }
   }
 </style>
