@@ -119,7 +119,7 @@ export class PlinkoSlotEngine {
   }> = [];
   private currentCelebrationIndex = -1;
   private celebrationStartTime = 0;
-  private static readonly CELEBRATION_DURATION = 1125; // ms per win celebration
+  private static readonly CELEBRATION_DURATION = 1250; // ms per win celebration
   
   // Sparkle particle system
   private sparkles: Array<{
@@ -548,7 +548,7 @@ export class PlinkoSlotEngine {
   }
   
   /**
-   * Render win celebration effects (pulsing, glowing symbols).
+   * Render win celebration effects (scale up with rotation, then back down).
    */
   private renderWinCelebrations(): void {
     if (this.currentCelebrationIndex < 0 || this.currentCelebrationIndex >= this.winCelebrations.length) {
@@ -566,34 +566,30 @@ export class PlinkoSlotEngine {
     const pinRadius = ((24 - rowCount) / 2) * scale;
     const symbolColor = PlinkoSlotEngine.getSymbolColor(celebration.symbolLevel);
     
-    // Fade-out phase starts at 75% progress
-    const fadeOutStart = 0.75;
-    const isFadingOut = progress > fadeOutStart;
+    // Animation: scale up to apex at 50%, then scale back down
+    // Use smooth ease-in-out curve
+    const easeInOut = (t: number) => t < 0.5 
+      ? 2 * t * t 
+      : 1 - Math.pow(-2 * t + 2, 2) / 2;
     
-    // Calculate fade multiplier (1 during main animation, eases to 0 during fade-out)
-    let fadeMult = 1;
-    if (isFadingOut) {
-      const fadeProgress = (progress - fadeOutStart) / (1 - fadeOutStart);
-      // Smooth ease-out curve (cubic)
-      fadeMult = 1 - (fadeProgress * fadeProgress * fadeProgress);
+    // Scale: 1.0 -> 1.3 -> 1.0 (apex at 50%)
+    const maxScaleBoost = 0.4;
+    let scaleProgress: number;
+    if (progress < 0.5) {
+      // First half: scale up (0 to 1)
+      scaleProgress = easeInOut(progress * 2);
+    } else {
+      // Second half: scale down (1 to 0)
+      scaleProgress = easeInOut(1 - (progress - 0.5) * 2);
     }
+    const symbolScale = 1 + maxScaleBoost * scaleProgress;
     
-    // Pulsing effect for SYMBOL ONLY (sine wave) - more dramatic scaling
-    const pulseFrequency = 1.3; // pulses per celebration (30% slower)
-    const pulsePhase = Math.sin(progress * Math.PI * 2 * pulseFrequency);
+    // Rotation: 0 -> 20deg -> 0 (apex at 50%)
+    const maxRotation = 20 * (Math.PI / 180); // 20 degrees in radians
+    const rotation = maxRotation * scaleProgress; // Same curve as scale
     
-    // During fade-out, ease the pulse scale back to 1.0
-    const basePulseScale = 1 + 0.2 * pulsePhase;
-    const symbolPulseScale = isFadingOut 
-      ? 1 + (basePulseScale - 1) * fadeMult  // Ease back to 1.0
-      : basePulseScale;
-    
-    // Glow intensity (starts strong, fades slightly, then strong at end) - with fade-out
-    const baseGlowIntensity = 0.6 + 0.4 * Math.sin(progress * Math.PI);
-    const glowIntensity = baseGlowIntensity * fadeMult;
-    
-    // Early exit if fully faded
-    if (fadeMult < 0.01) return;
+    // Glow intensity follows the same curve
+    const glowIntensity = 0.4 + 0.6 * scaleProgress;
     
     for (const pegId of celebration.pegIds) {
       const peg = this.pegs.get(pegId);
@@ -601,7 +597,7 @@ export class PlinkoSlotEngine {
       
       ctx.save();
       
-      // Draw outer glow (fixed size, no pulsing) - fades out
+      // Draw outer glow
       const glowRadius = pinRadius * 2.5;
       const gradient = ctx.createRadialGradient(
         peg.x, peg.y, pinRadius * 0.5,
@@ -617,7 +613,7 @@ export class PlinkoSlotEngine {
       ctx.arc(peg.x, peg.y, glowRadius, 0, Math.PI * 2);
       ctx.fill();
       
-      // Draw highlight ring (fixed size, no pulsing) - fades out
+      // Draw highlight ring
       ctx.globalAlpha = 0.8 * glowIntensity;
       ctx.strokeStyle = '#FFFFFF';
       ctx.lineWidth = 3 * scale;
@@ -625,20 +621,12 @@ export class PlinkoSlotEngine {
       ctx.arc(peg.x, peg.y, pinRadius * 1.3, 0, Math.PI * 2);
       ctx.stroke();
       
-      // Draw scaled symbol on top - this is what pulses!
+      // Draw scaled and rotated symbol
       const symbolImg = this.pegSymbols.get(celebration.symbolLevel);
       if (symbolImg && symbolImg.naturalWidth > 0) {
-        // Normal symbol size (what it should be when not celebrating)
         const normalSize = pinRadius * 1.8;
-        // Celebration base size is larger
         const celebrationBaseSize = pinRadius * 2.2;
-        
-        // During fade-out, interpolate base size back to normal
-        const baseSize = isFadingOut 
-          ? normalSize + (celebrationBaseSize - normalSize) * fadeMult
-          : celebrationBaseSize;
-        
-        const maxSize = baseSize * symbolPulseScale;
+        const maxSize = celebrationBaseSize * symbolScale;
         const aspectRatio = symbolImg.naturalWidth / symbolImg.naturalHeight;
         
         let drawWidth: number;
@@ -652,17 +640,14 @@ export class PlinkoSlotEngine {
           drawWidth = maxSize * aspectRatio;
         }
         
-        // Draw dark circular backdrop behind the symbol for better visibility - fades out
+        // Draw dark circular backdrop behind the symbol
         const backdropRadius = Math.max(drawWidth, drawHeight) * 0.6;
         const backdropGradient = ctx.createRadialGradient(
           peg.x, peg.y, 0,
           peg.x, peg.y, backdropRadius
         );
-        
-        // Backdrop opacity fades out
-        const backdropOpacity = 0.85 * fadeMult;
-        backdropGradient.addColorStop(0, `rgba(0, 0, 0, ${backdropOpacity})`);
-        backdropGradient.addColorStop(0.7, `rgba(0, 0, 0, ${backdropOpacity * 0.7})`);
+        backdropGradient.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
+        backdropGradient.addColorStop(0.7, 'rgba(0, 0, 0, 0.6)');
         backdropGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
         
         ctx.globalAlpha = 1;
@@ -671,11 +656,13 @@ export class PlinkoSlotEngine {
         ctx.arc(peg.x, peg.y, backdropRadius, 0, Math.PI * 2);
         ctx.fill();
         
-        // Draw the symbol
+        // Translate to peg center, rotate, then draw symbol centered at origin
+        ctx.translate(peg.x, peg.y);
+        ctx.rotate(rotation);
         ctx.drawImage(
           symbolImg,
-          peg.x - drawWidth / 2,
-          peg.y - drawHeight / 2,
+          -drawWidth / 2,
+          -drawHeight / 2,
           drawWidth,
           drawHeight
         );
