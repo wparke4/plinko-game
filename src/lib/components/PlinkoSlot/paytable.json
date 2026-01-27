@@ -107,7 +107,7 @@
   },
 
   "physics": {
-    "ballDropDelayMs": 800,
+    "ballDropDelayMs": 55,
     "ballDropJitterX": 15,
     "restitution": 0.75,
     "friction": 0.4,

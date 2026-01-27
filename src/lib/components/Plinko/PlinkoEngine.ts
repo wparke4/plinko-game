@@ -137,7 +137,7 @@ class PlinkoEngine {
       options: {
         width: PlinkoEngine.WIDTH,
         height: PlinkoEngine.HEIGHT,
-        background: '#000000',
+        background: '#00212F',
         wireframes: false,
       },
     });
@@ -213,7 +213,7 @@ class PlinkoEngine {
           mask: PlinkoEngine.PIN_CATEGORY, // Collide with pins only, but not other balls
         },
         render: {
-          fillStyle: '#A3E635',
+          fillStyle: '#FF1449',
         },
       },
     );

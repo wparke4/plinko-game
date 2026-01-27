@@ -120,12 +120,46 @@
   }
 </script>
 
-<div class="flex flex-col h-screen bg-black">
-  <!-- Header with Wallet -->
-  <header class="flex items-center justify-center py-4 px-6 bg-neutral-900 shadow-lg shadow-black/30 relative z-10">
-    <div class="flex items-center border border-green-800 rounded-lg overflow-hidden">
-      <span class="text-sm font-medium text-neutral-400 uppercase tracking-wide px-4 py-2">Wallet</span>
-      <span class="text-lg font-semibold text-white px-4 py-2 bg-neutral-800 border-l border-green-800">${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+<div class="flex flex-col h-screen bg-[#00212F]">
+  <!-- Header with Bet Amount and Balance -->
+  <header class="flex items-center justify-center gap-10 py-4 px-6 bg-[#142E37] shadow-lg shadow-black/30 relative z-10">
+    <!-- Bet Amount Container -->
+    <div class="flex flex-col gap-0.5">
+      <label class="text-sm font-medium text-[#9BB3C3] tracking-tight">
+        Bet Amount
+      </label>
+      <div class="flex items-center justify-between bg-[#06222C] border-2 border-[#263F49] rounded px-3 py-1.5 w-40">
+        <div class="relative flex-1">
+          <span class="text-white text-base font-semibold tabular-nums pointer-events-none">{betAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          <input
+            type="number"
+            bind:value={betAmount}
+            min="0"
+            step="0.01"
+            class="absolute inset-0 w-full bg-transparent text-transparent caret-white focus:outline-none tabular-nums"
+          />
+        </div>
+        <svg class="w-5 h-5 flex-shrink-0 ml-1" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9.651 19.302C14.972 19.302 19.302 14.972 19.302 9.651C19.302 4.33 14.973 0 9.651 0C4.329 0 0 4.329 0 9.651C0 14.972 4.329 19.302 9.651 19.302ZM8.574 10.191C6.953 10.191 5.634 8.872 5.634 7.251C5.634 5.63 6.953 4.311 8.574 4.311H9.112V3.305C9.112 3.007 9.354 2.765 9.652 2.765C9.951 2.765 10.192 3.007 10.192 3.305V4.311H10.729C12.35 4.311 13.669 5.63 13.669 7.251C13.669 7.549 13.427 7.791 13.129 7.791C12.831 7.791 12.589 7.549 12.589 7.251C12.589 6.225 11.755 5.391 10.729 5.391H10.192V9.111H10.729C12.35 9.111 13.669 10.43 13.669 12.051C13.669 13.672 12.35 14.991 10.729 14.991H10.192V15.997C10.192 16.295 9.95 16.537 9.652 16.537C9.354 16.537 9.112 16.295 9.112 15.997V14.991H8.574C6.953 14.991 5.634 13.672 5.634 12.051C5.634 11.753 5.876 11.511 6.174 11.511C6.473 11.511 6.714 11.753 6.714 12.051C6.714 13.077 7.548 13.911 8.574 13.911H9.112V10.191H8.574Z" fill="#70E848"/>
+          <path d="M12.589 12.051C12.589 11.025 11.755 10.191 10.729 10.191H10.192V13.911H10.729C11.755 13.911 12.589 13.077 12.589 12.051Z" fill="#70E848"/>
+          <path d="M9.11101 5.39099H8.57301C7.54701 5.39099 6.71301 6.22499 6.71301 7.25099C6.71301 8.27699 7.54701 9.11099 8.57301 9.11099H9.11101V5.39099Z" fill="#70E848"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Balance Container -->
+    <div class="flex flex-col gap-0.5">
+      <label class="text-sm font-medium text-[#9BB3C3] tracking-tight">
+        Balance
+      </label>
+      <div class="flex items-center justify-between bg-[#06222C] border-2 border-[#263F49] rounded px-3 py-1.5 w-42">
+        <span class="text-white text-base font-semibold tabular-nums">${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        <svg class="w-5 h-5 flex-shrink-0 ml-1" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9.651 19.302C14.972 19.302 19.302 14.972 19.302 9.651C19.302 4.33 14.973 0 9.651 0C4.329 0 0 4.329 0 9.651C0 14.972 4.329 19.302 9.651 19.302ZM8.574 10.191C6.953 10.191 5.634 8.872 5.634 7.251C5.634 5.63 6.953 4.311 8.574 4.311H9.112V3.305C9.112 3.007 9.354 2.765 9.652 2.765C9.951 2.765 10.192 3.007 10.192 3.305V4.311H10.729C12.35 4.311 13.669 5.63 13.669 7.251C13.669 7.549 13.427 7.791 13.129 7.791C12.831 7.791 12.589 7.549 12.589 7.251C12.589 6.225 11.755 5.391 10.729 5.391H10.192V9.111H10.729C12.35 9.111 13.669 10.43 13.669 12.051C13.669 13.672 12.35 14.991 10.729 14.991H10.192V15.997C10.192 16.295 9.95 16.537 9.652 16.537C9.354 16.537 9.112 16.295 9.112 15.997V14.991H8.574C6.953 14.991 5.634 13.672 5.634 12.051C5.634 11.753 5.876 11.511 6.174 11.511C6.473 11.511 6.714 11.753 6.714 12.051C6.714 13.077 7.548 13.911 8.574 13.911H9.112V10.191H8.574Z" fill="#70E848"/>
+          <path d="M12.589 12.051C12.589 11.025 11.755 10.191 10.729 10.191H10.192V13.911H10.729C11.755 13.911 12.589 13.077 12.589 12.051Z" fill="#70E848"/>
+          <path d="M9.11101 5.39099H8.57301C7.54701 5.39099 6.71301 6.22499 6.71301 7.25099C6.71301 8.27699 7.54701 9.11099 8.57301 9.11099H9.11101V5.39099Z" fill="#70E848"/>
+        </svg>
+      </div>
     </div>
     
     <!-- Settings Cog -->
@@ -143,24 +177,6 @@
     <div class="w-1/5 flex flex-col bg-neutral-950 border-r border-neutral-800">
       <!-- Betting Controls -->
       <div class="flex flex-col gap-8 p-4 pt-[18vh]">
-      <!-- Amount Section -->
-      <div class="flex flex-col gap-2">
-        <label for="bet-amount" class="text-sm font-medium text-neutral-400 uppercase tracking-wide">
-          Amount
-        </label>
-        <div class="relative">
-          <span class="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-neutral-500">$</span>
-          <input
-            id="bet-amount"
-            type="number"
-            bind:value={betAmount}
-            min="0"
-            step="10"
-            class="w-full rounded-lg bg-neutral-800 border border-neutral-700 pl-8 pr-4 py-3 text-white text-lg font-medium focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors"
-          />
-        </div>
-      </div>
-
       <!-- Risk Section -->
       <div class="flex flex-col gap-2">
         <label class="text-sm font-medium text-neutral-400 uppercase tracking-wide">
@@ -223,7 +239,7 @@
   </div>
 
   <!-- Right side: Game Area (75%) -->
-  <div class="relative flex-1 bg-black">
+  <div class="relative flex-1 bg-[#00212F]">
     <div class="mx-auto flex h-full flex-col px-4 pt-[8vh]" style:max-width={`${WIDTH}px`}>
       <div class="relative w-full" style:aspect-ratio={`${WIDTH} / ${HEIGHT}`}>
         {#if $plinkoEngine === null}
