@@ -47,7 +47,11 @@
     8: 'Money',
     9: 'Sun',
     10: 'Diamond',
+    [-1]: 'All Pegs', // Special bonus
   };
+  
+  // Special symbol ID for All Pegs bonus
+  const ALL_PEGS_SYMBOL_ID = -1;
   
   const config = paytable as PaytableConfig;
   const { WIDTH, HEIGHT } = PlinkoSlotEngine;
@@ -76,6 +80,7 @@
   let winEntries = $state<WinEntry[]>([]);
   let winEntryIdCounter = 0;
   const MAX_WIN_ENTRIES = 5;
+  let pendingWinnings = $state(0); // Track total winnings from symbol wins
   
   // Provably fair state
   let fairState = $state({
@@ -114,10 +119,7 @@
       },
       onRunComplete: (result) => {
         payoutResult = result;
-        
-        // Calculate winnings
-        const winnings = betAmount * result.totalMultiplier;
-        balance += winnings;
+        // Balance will be updated via onWinCelebration and onAllCelebrationsComplete
       },
       onPhaseChange: (phase) => {
         gamePhase = phase;
@@ -128,6 +130,9 @@
         
         // Add a new win entry to the payout display
         const payout = betAmount * multiplier;
+        
+        // Track winnings to add to balance
+        pendingWinnings += payout;
         const newEntry: WinEntry = {
           id: ++winEntryIdCounter,
           symbolLevel,
@@ -166,6 +171,10 @@
       onAllCelebrationsComplete: () => {
         isCelebrating = false;
         currentCelebration = null;
+        
+        // Add all winnings to balance
+        balance += pendingWinnings;
+        pendingWinnings = 0;
       }
     });
     
@@ -196,6 +205,7 @@
     exitedBalls = [];
     payoutResult = null;
     winEntries = []; // Reset win entries for new game
+    pendingWinnings = 0; // Reset pending winnings
     
     // Deduct bet
     balance -= betAmount;
@@ -307,17 +317,21 @@
       {#each winEntries as entry (entry.id)}
         <div 
           class="win-entry flex items-center justify-between p-3 bg-neutral-900 border border-neutral-700 rounded-lg overflow-hidden
-            {entry.isNew ? 'win-entry-new' : ''}
+            {entry.isNew ? (entry.symbolLevel === ALL_PEGS_SYMBOL_ID ? 'win-entry-new-gold' : 'win-entry-new') : ''}
             {entry.isExiting ? 'win-entry-exit' : ''}"
         >
-          <!-- Left side: count + symbol -->
+          <!-- Left side: count + symbol (or bonus text) -->
           <div class="flex items-center gap-2">
-            <span class="text-xl font-bold text-white">{entry.count}</span>
-            <img 
-              src={SYMBOL_SVGS[entry.symbolLevel]} 
-              alt={SYMBOL_NAMES[entry.symbolLevel]}
-              class="w-8 h-8 object-contain"
-            />
+            {#if entry.symbolLevel === ALL_PEGS_SYMBOL_ID}
+              <span class="text-sm font-bold text-yellow-400">⭐ ALL PEGS</span>
+            {:else}
+              <span class="text-xl font-bold text-white">{entry.count}</span>
+              <img 
+                src={SYMBOL_SVGS[entry.symbolLevel]} 
+                alt={SYMBOL_NAMES[entry.symbolLevel]}
+                class="w-8 h-8 object-contain"
+              />
+            {/if}
           </div>
           
           <!-- Right side: payout amount -->
@@ -496,6 +510,13 @@
     background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(23, 23, 23, 1) 50%);
     border-color: rgb(34, 197, 94);
     box-shadow: 0 0 20px rgba(34, 197, 94, 0.4), inset 0 0 20px rgba(34, 197, 94, 0.1);
+  }
+  
+  .win-entry-new-gold {
+    animation: winEntrySpawn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.3) 0%, rgba(23, 23, 23, 1) 50%);
+    border-color: rgb(255, 215, 0);
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.5), inset 0 0 25px rgba(255, 215, 0, 0.15);
   }
   
   .win-entry-exit {

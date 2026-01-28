@@ -4,12 +4,12 @@
   
   "board": {
     "rows": 5,
-    "ballCount": 20,
+    "ballCount": 300,
     "maxPegLevel": 10
   },
 
   "pegColors": {
-    "0": "#111827",
+    "0": "#3d3d3d",
     "1": "#6B7280",
     "2": "#4B6CB7",
     "3": "#2FA4A9",
@@ -108,10 +108,10 @@
 
   "physics": {
     "ballDropDelayMs": 35,
-    "ballDropJitterX": 15,
-    "restitution": 0.75,
-    "friction": 0.4,
-    "frictionAir": 0.02
+    "ballDropJitterX": 20,
+    "restitution": 0.85,
+    "friction": 0.25,
+    "frictionAir": 0.015
   },
 
   "targetRTP": {

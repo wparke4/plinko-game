@@ -116,10 +116,12 @@ export class PlinkoSlotEngine {
     multiplier: number;
     startTime: number;
     duration: number;
+    isAllPegsBonus: boolean;
   }> = [];
   private currentCelebrationIndex = -1;
   private celebrationStartTime = 0;
-  private static readonly CELEBRATION_DURATION = 1250; // ms per win celebration
+  private static readonly CELEBRATION_DURATION = 1125; // ms per win celebration
+  private static readonly ALL_PEGS_CELEBRATION_DURATION = 2250; // 2x duration for all pegs bonus
   
   // Sparkle particle system
   private sparkles: Array<{
@@ -208,7 +210,7 @@ export class PlinkoSlotEngine {
     // Create Matter.js engine with fixed timestep
     this.engine = Matter.Engine.create({
       timing: {
-        timeScale: 2.25, // Speed up physics simulation
+        timeScale: 4, // Speed up physics simulation
       },
     });
     
@@ -343,24 +345,32 @@ export class PlinkoSlotEngine {
     const celebration = this.winCelebrations[this.currentCelebrationIndex];
     const elapsed = now - celebration.startTime;
     
-    // Don't spawn in the last 400ms (let existing sparkles fade out)
-    if (elapsed > celebration.duration - 250) return;
+    // Don't spawn in the last portion (let existing sparkles fade out)
+    const fadeOutBuffer = celebration.isAllPegsBonus ? 500 : 250;
+    if (elapsed > celebration.duration - fadeOutBuffer) return;
     
-    // Check spawn rate
-    if (now - this.lastSparkleSpawn < PlinkoSlotEngine.SPARKLE_SPAWN_RATE) return;
+    // Check spawn rate (faster for All Pegs bonus)
+    const spawnRate = celebration.isAllPegsBonus 
+      ? PlinkoSlotEngine.SPARKLE_SPAWN_RATE / 2 
+      : PlinkoSlotEngine.SPARKLE_SPAWN_RATE;
+    if (now - this.lastSparkleSpawn < spawnRate) return;
     this.lastSparkleSpawn = now;
     
-    const symbolColor = PlinkoSlotEngine.getSymbolColor(celebration.symbolLevel);
+    // Use golden color for All Pegs bonus, otherwise use symbol color
+    const symbolColor = celebration.isAllPegsBonus 
+      ? '#FFD700' 
+      : PlinkoSlotEngine.getSymbolColor(celebration.symbolLevel);
     const scale = PlinkoSlotEngine.SIZE_SCALE;
     const rowCount = this.config.board.rows;
     const pinRadius = ((24 - rowCount) / 2) * scale;
     
-    // Spawn 1-2 sparkles per winning peg
+    // Spawn more sparkles for All Pegs bonus (2-4 instead of 1-2)
     for (const pegId of celebration.pegIds) {
       const peg = this.pegs.get(pegId);
       if (!peg) continue;
       
-      const sparkleCount = Math.random() < 0.5 ? 1 : 2;
+      const baseCount = celebration.isAllPegsBonus ? 2 : 1;
+      const sparkleCount = baseCount + (Math.random() < 0.5 ? 0 : baseCount);
       
       for (let i = 0; i < sparkleCount; i++) {
         // Random position around the peg
@@ -485,18 +495,26 @@ export class PlinkoSlotEngine {
     });
   }
   
+  // Special symbol ID for "All Pegs" bonus win
+  static readonly ALL_PEGS_SYMBOL_ID = -1;
+  static readonly ALL_PEGS_MULTIPLIER = 2;
+  
   /**
-   * Detect all winning symbol combinations (3+ matching symbols).
+   * Detect all winning symbol combinations (4+ matching symbols) and special bonuses.
    */
-  private detectWins(): Array<{ symbolLevel: number; pegIds: string[]; multiplier: number }> {
-    const wins: Array<{ symbolLevel: number; pegIds: string[]; multiplier: number }> = [];
+  private detectWins(): Array<{ symbolLevel: number; pegIds: string[]; multiplier: number; isAllPegsBonus?: boolean }> {
+    const wins: Array<{ symbolLevel: number; pegIds: string[]; multiplier: number; isAllPegsBonus?: boolean }> = [];
     
     // Count pegs at each symbol level (any valid symbol)
     const symbolPegs: Map<number, string[]> = new Map();
+    const allPegIds: string[] = [];
+    let pegsWithSymbols = 0;
     
     for (const [pegId, peg] of this.pegs) {
+      allPegIds.push(pegId);
       // Check if this peg has a valid symbol (level > 0)
       if (peg.level > 0 && PlinkoSlotEngine.getSymbol(peg.level)) {
+        pegsWithSymbols++;
         if (!symbolPegs.has(peg.level)) {
           symbolPegs.set(peg.level, []);
         }
@@ -504,7 +522,7 @@ export class PlinkoSlotEngine {
       }
     }
     
-    // Check for wins (3+ of same symbol)
+    // Check for wins (4+ of same symbol)
     for (const [level, pegIds] of symbolPegs) {
       const count = pegIds.length;
       if (count >= 4) {
@@ -522,6 +540,16 @@ export class PlinkoSlotEngine {
     // Sort by multiplier (ascending) - least valuable first
     wins.sort((a, b) => a.multiplier - b.multiplier);
     
+    // Check for "All Pegs" bonus (all pegs have a symbol) - added last as the grand finale
+    if (pegsWithSymbols === this.pegs.size) {
+      wins.push({
+        symbolLevel: PlinkoSlotEngine.ALL_PEGS_SYMBOL_ID,
+        pegIds: allPegIds,
+        multiplier: PlinkoSlotEngine.ALL_PEGS_MULTIPLIER,
+        isAllPegsBonus: true,
+      });
+    }
+    
     return wins;
   }
   
@@ -533,6 +561,7 @@ export class PlinkoSlotEngine {
     
     if (wins.length === 0) {
       // No wins, complete immediately
+      this.setPhase('complete');
       this.callbacks.onAllCelebrationsComplete?.();
       return;
     }
@@ -543,7 +572,10 @@ export class PlinkoSlotEngine {
       pegIds: win.pegIds,
       multiplier: win.multiplier,
       startTime: 0, // Will be set when celebration starts
-      duration: PlinkoSlotEngine.CELEBRATION_DURATION,
+      duration: win.isAllPegsBonus 
+        ? PlinkoSlotEngine.ALL_PEGS_CELEBRATION_DURATION 
+        : PlinkoSlotEngine.CELEBRATION_DURATION,
+      isAllPegsBonus: win.isAllPegsBonus ?? false,
     }));
     
     // Start first celebration
@@ -558,6 +590,7 @@ export class PlinkoSlotEngine {
     if (this.currentCelebrationIndex >= this.winCelebrations.length) {
       // All celebrations complete
       this.currentCelebrationIndex = -1;
+      this.setPhase('complete');
       this.callbacks.onAllCelebrationsComplete?.();
       return;
     }
@@ -597,7 +630,10 @@ export class PlinkoSlotEngine {
     const scale = PlinkoSlotEngine.SIZE_SCALE;
     const rowCount = this.config.board.rows;
     const pinRadius = ((24 - rowCount) / 2) * scale;
-    const symbolColor = PlinkoSlotEngine.getSymbolColor(celebration.symbolLevel);
+    // Use golden color for All Pegs bonus, otherwise use symbol color
+    const symbolColor = celebration.isAllPegsBonus 
+      ? '#FFD700' 
+      : PlinkoSlotEngine.getSymbolColor(celebration.symbolLevel);
     
     // Animation: scale up to apex at 50%, then scale back down
     // Use smooth ease-in-out curve
@@ -1416,13 +1452,14 @@ export class PlinkoSlotEngine {
       this.replayLog.payoutResult = payoutResult;
     }
 
-    // Start win celebrations (will call onAllCelebrationsComplete when done)
-    this.startWinCelebrations();
-
     // Callback for run complete (UI can update balance, etc.)
     this.callbacks.onRunComplete?.(payoutResult);
-    
-    this.setPhase('complete');
+
+    // Start win celebrations after a brief pause (will call onAllCelebrationsComplete when done)
+    // Phase remains 'evaluating' until celebrations complete to keep play button disabled
+    setTimeout(() => {
+      this.startWinCelebrations();
+    }, 300);
   }
 
   /**
