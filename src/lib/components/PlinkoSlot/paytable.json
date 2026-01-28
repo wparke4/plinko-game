@@ -4,12 +4,12 @@
   
   "board": {
     "rows": 5,
-    "ballCount": 300,
+    "ballCount": 20,
     "maxPegLevel": 10
   },
 
   "pegColors": {
-    "0": "#3d3d3d",
+    "0": "#2a2c2e",
     "1": "#6B7280",
     "2": "#4B6CB7",
     "3": "#2FA4A9",

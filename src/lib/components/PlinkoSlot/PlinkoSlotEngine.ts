@@ -139,7 +139,7 @@ export class PlinkoSlotEngine {
     twinkleOffset: number; // For glistening effect
   }> = [];
   private lastSparkleSpawn = 0;
-  private static readonly SPARKLE_SPAWN_RATE = 25; // ms between spawns per peg
+  private static readonly SPARKLE_SPAWN_RATE = 15; // ms between spawns per peg (faster = more particles)
   
   // Symbol definitions - easy to add more symbols here!
   // Each symbol has: id, name, color (for glow), payouts by count
@@ -369,28 +369,28 @@ export class PlinkoSlotEngine {
       const peg = this.pegs.get(pegId);
       if (!peg) continue;
       
-      const baseCount = celebration.isAllPegsBonus ? 2 : 1;
-      const sparkleCount = baseCount + (Math.random() < 0.5 ? 0 : baseCount);
+      const baseCount = celebration.isAllPegsBonus ? 4 : 3;
+      const sparkleCount = baseCount + Math.floor(Math.random() * baseCount);
       
       for (let i = 0; i < sparkleCount; i++) {
         // Random position around the peg
         const angle = Math.random() * Math.PI * 2;
-        const distance = pinRadius * (0.5 + Math.random() * 1.5);
+        const distance = pinRadius * (0.3 + Math.random() * 1.8);
         const x = peg.x + Math.cos(angle) * distance;
         const y = peg.y + Math.sin(angle) * distance;
         
         // Random velocity (mostly upward with some spread)
-        const speed = 0.3 + Math.random() * 0.8;
-        const velAngle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.8; // Upward bias
+        const speed = 0.4 + Math.random() * 1.0;
+        const velAngle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.9; // Upward bias with more spread
         const vx = Math.cos(velAngle) * speed;
         const vy = Math.sin(velAngle) * speed;
         
         // Pick color: mix of white, gold, and symbol color
         const colorRoll = Math.random();
         let color: string;
-        if (colorRoll < 0.4) {
+        if (colorRoll < 0.35) {
           color = '#FFFFFF'; // White sparkles
-        } else if (colorRoll < 0.7) {
+        } else if (colorRoll < 0.65) {
           color = '#FFD700'; // Gold sparkles
         } else {
           color = symbolColor; // Symbol-colored sparkles
@@ -401,13 +401,13 @@ export class PlinkoSlotEngine {
           y,
           vx,
           vy,
-          size: 2 + Math.random() * 4,
-          alpha: 0.8 + Math.random() * 0.2,
+          size: 3 + Math.random() * 5,
+          alpha: 0.85 + Math.random() * 0.15,
           color,
           rotation: Math.random() * Math.PI * 2,
-          rotationSpeed: (Math.random() - 0.5) * 0.3,
+          rotationSpeed: (Math.random() - 0.5) * 0.4,
           birthTime: now,
-          lifetime: 600 + Math.random() * 600, // 600-1200ms
+          lifetime: 700 + Math.random() * 700, // 700-1400ms
           twinkleOffset: Math.random() * Math.PI * 2,
         });
       }
@@ -642,7 +642,7 @@ export class PlinkoSlotEngine {
       : 1 - Math.pow(-2 * t + 2, 2) / 2;
     
     // Scale: 1.0 -> 1.3 -> 1.0 (apex at 50%)
-    const maxScaleBoost = 0.4;
+    const maxScaleBoost = 1.0;
     let scaleProgress: number;
     if (progress < 0.5) {
       // First half: scale up (0 to 1)
@@ -691,7 +691,9 @@ export class PlinkoSlotEngine {
       ctx.stroke();
       
       // Draw scaled and rotated symbol
-      const symbolImg = this.pegSymbols.get(celebration.symbolLevel);
+      // For All Pegs bonus, use the peg's actual level; otherwise use celebration's symbolLevel
+      const symbolLevel = celebration.isAllPegsBonus ? peg.level : celebration.symbolLevel;
+      const symbolImg = this.pegSymbols.get(symbolLevel);
       if (symbolImg && symbolImg.naturalWidth > 0) {
         const normalSize = pinRadius * 1.8;
         const celebrationBaseSize = pinRadius * 2.2;

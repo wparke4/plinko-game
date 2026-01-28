@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
   import CircleNotch from 'phosphor-svelte/lib/CircleNotch';
   import Gear from 'phosphor-svelte/lib/Gear';
   import X from 'phosphor-svelte/lib/X';
@@ -98,6 +98,14 @@
   let isCelebrating = $state(false);
   let currentCelebration = $state<{ symbolLevel: number; count: number; multiplier: number } | null>(null);
   
+  // Total win display state
+  let showTotalWin = $state(false);
+  let totalWinAmount = $state(0);
+  let displayedWinAmount = $state(0);
+  let totalWinExiting = $state(false);
+  let totalWinHideTimeout: ReturnType<typeof setTimeout> | null = null;
+  let incrementAnimationFrame: number | null = null;
+  
   // Derived
   let isRunning = $derived(gamePhase === 'dropping' || gamePhase === 'evaluating');
   let canPlay = $derived(!isRunning && !isCelebrating && balance >= betAmount && betAmount > 0);
@@ -167,6 +175,31 @@
             e.id === newEntry.id ? { ...e, isNew: false } : e
           );
         }, 600);
+        
+        // Show total win container and animate the amount
+        if (!showTotalWin) {
+          // First win - show the container
+          showTotalWin = true;
+          totalWinExiting = false;
+          totalWinAmount = 0;
+          displayedWinAmount = 0;
+          
+          // Clear any existing hide timeout
+          if (totalWinHideTimeout) {
+            clearTimeout(totalWinHideTimeout);
+            totalWinHideTimeout = null;
+          }
+        }
+        
+        // Update total and start incrementing animation
+        const previousTotal = totalWinAmount;
+        totalWinAmount += payout;
+        
+        // Celebration duration (1125ms for normal, 2250ms for all pegs bonus)
+        const celebrationDuration = symbolLevel === ALL_PEGS_SYMBOL_ID ? 2250 : 1125;
+        
+        // Animate the increment over the celebration duration (leave some buffer)
+        animateWinIncrement(previousTotal, totalWinAmount, celebrationDuration - 200);
       },
       onAllCelebrationsComplete: () => {
         isCelebrating = false;
@@ -175,6 +208,20 @@
         // Add all winnings to balance
         balance += pendingWinnings;
         pendingWinnings = 0;
+        
+        // Hide total win after 2 seconds
+        if (showTotalWin) {
+          totalWinHideTimeout = setTimeout(() => {
+            totalWinExiting = true;
+            // Remove from DOM after exit animation
+            setTimeout(() => {
+              showTotalWin = false;
+              totalWinExiting = false;
+              totalWinAmount = 0;
+              displayedWinAmount = 0;
+            }, 400);
+          }, 2000);
+        }
       }
     });
     
@@ -197,6 +244,57 @@
     };
   };
   
+  /**
+   * Animate the win amount incrementing smoothly.
+   */
+  function animateWinIncrement(from: number, to: number, duration: number) {
+    // Cancel any existing animation
+    if (incrementAnimationFrame) {
+      cancelAnimationFrame(incrementAnimationFrame);
+      incrementAnimationFrame = null;
+    }
+    
+    const startTime = performance.now();
+    const diff = to - from;
+    
+    function tick(currentTime: number) {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Ease-out curve for satisfying deceleration
+      const eased = 1 - Math.pow(1 - progress, 3);
+      
+      displayedWinAmount = from + diff * eased;
+      
+      if (progress < 1) {
+        incrementAnimationFrame = requestAnimationFrame(tick);
+      } else {
+        displayedWinAmount = to;
+        incrementAnimationFrame = null;
+      }
+    }
+    
+    incrementAnimationFrame = requestAnimationFrame(tick);
+  }
+  
+  /**
+   * Instantly hide the total win display (when starting new game).
+   */
+  function hideTotalWinInstantly() {
+    if (totalWinHideTimeout) {
+      clearTimeout(totalWinHideTimeout);
+      totalWinHideTimeout = null;
+    }
+    if (incrementAnimationFrame) {
+      cancelAnimationFrame(incrementAnimationFrame);
+      incrementAnimationFrame = null;
+    }
+    showTotalWin = false;
+    totalWinExiting = false;
+    totalWinAmount = 0;
+    displayedWinAmount = 0;
+  }
+  
   async function handlePlay() {
     if (!engine || !canPlay) return;
     
@@ -206,6 +304,9 @@
     payoutResult = null;
     winEntries = []; // Reset win entries for new game
     pendingWinnings = 0; // Reset pending winnings
+    
+    // Instantly hide total win display when starting new game
+    hideTotalWinInstantly();
     
     // Deduct bet
     balance -= betAmount;
@@ -250,6 +351,16 @@
     balance = Math.max(0, Number(settingsBalance));
     showSettings = false;
   }
+  
+  // Cleanup timers on destroy
+  onDestroy(() => {
+    if (totalWinHideTimeout) {
+      clearTimeout(totalWinHideTimeout);
+    }
+    if (incrementAnimationFrame) {
+      cancelAnimationFrame(incrementAnimationFrame);
+    }
+  });
 </script>
 
 <div class="flex h-screen bg-black">
@@ -316,8 +427,8 @@
     <div class="min-h-[280px] flex flex-col justify-end gap-2 overflow-hidden">
       {#each winEntries as entry (entry.id)}
         <div 
-          class="win-entry flex items-center justify-between p-3 bg-neutral-900 border border-neutral-700 rounded-lg overflow-hidden
-            {entry.isNew ? (entry.symbolLevel === ALL_PEGS_SYMBOL_ID ? 'win-entry-new-gold' : 'win-entry-new') : ''}
+          class="win-entry flex items-center justify-between p-3 bg-neutral-900 border border-neutral-700 rounded-lg
+            {entry.isNew ? 'win-entry-new-subtle' : ''}
             {entry.isExiting ? 'win-entry-exit' : ''}"
         >
           <!-- Left side: count + symbol (or bonus text) -->
@@ -338,18 +449,6 @@
           <div class="text-lg font-bold text-green-400">
             ${entry.payout.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          
-          <!-- Sparkle particles overlay -->
-          {#if entry.isNew}
-            <div class="sparkle-container">
-              {#each Array(12) as _, i}
-                <div 
-                  class="sparkle" 
-                  style="--delay: {i * 50}ms; --x: {Math.random() * 100}%; --y: {Math.random() * 100}%;"
-                ></div>
-              {/each}
-            </div>
-          {/if}
         </div>
       {/each}
     </div>
@@ -357,6 +456,23 @@
 
   <!-- Center: Game Board -->
   <div class="flex-1 flex flex-col items-center justify-center bg-black p-4">
+    <!-- Total Win Container (above the board) -->
+    <div class="relative h-24 mb-4 mt-8" style:width="{WIDTH}px">
+      {#if showTotalWin}
+        <div 
+          class="total-win-container absolute inset-0 flex flex-col items-center justify-center
+            {totalWinExiting ? 'total-win-exit' : 'total-win-enter'}"
+        >
+          <div class="total-win-label text-sm font-medium text-neutral-400 uppercase tracking-wider mb-1">
+            Win
+          </div>
+          <div class="total-win-amount text-2xl font-semibold text-emerald-400/90">
+            ${displayedWinAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        </div>
+      {/if}
+    </div>
+    
     <div class="relative" style:width="{WIDTH}px" style:height="{HEIGHT}px">
       {#if engine === null}
         <div class="absolute inset-0 flex items-center justify-center">
@@ -499,24 +615,15 @@
     -moz-appearance: textfield;
   }
   
-  /* Win entry spawn animation */
+  /* Win entry - simplified, subtle styling */
   .win-entry {
     position: relative;
     transition: all 0.3s ease;
   }
   
-  .win-entry-new {
-    animation: winEntrySpawn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(23, 23, 23, 1) 50%);
-    border-color: rgb(34, 197, 94);
-    box-shadow: 0 0 20px rgba(34, 197, 94, 0.4), inset 0 0 20px rgba(34, 197, 94, 0.1);
-  }
-  
-  .win-entry-new-gold {
-    animation: winEntrySpawn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.3) 0%, rgba(23, 23, 23, 1) 50%);
-    border-color: rgb(255, 215, 0);
-    box-shadow: 0 0 25px rgba(255, 215, 0, 0.5), inset 0 0 25px rgba(255, 215, 0, 0.15);
+  .win-entry-new-subtle {
+    animation: winEntrySpawnSubtle 0.4s ease-out;
+    border-color: rgba(34, 197, 94, 0.5);
   }
   
   .win-entry-exit {
@@ -526,83 +633,63 @@
   @keyframes winEntryExit {
     0% {
       opacity: 1;
-      transform: scale(1) translateY(0);
+      transform: translateY(0);
     }
     100% {
       opacity: 0;
-      transform: scale(0.8) translateY(30px);
+      transform: translateY(20px);
     }
   }
   
-  @keyframes winEntrySpawn {
+  @keyframes winEntrySpawnSubtle {
     0% {
       opacity: 0;
-      transform: scale(0.95) translateY(-10px);
+      transform: translateY(-8px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  /* Total Win Container */
+  .total-win-container {
+    background: radial-gradient(ellipse at center, rgba(34, 197, 94, 0.15) 0%, transparent 70%);
+    border-radius: 16px;
+    overflow: visible;
+  }
+  
+  .total-win-enter {
+    animation: totalWinEnter 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+  
+  .total-win-exit {
+    animation: totalWinExit 0.4s ease-in forwards;
+  }
+  
+  @keyframes totalWinEnter {
+    0% {
+      opacity: 0;
+      transform: scale(0.5);
     }
     60% {
-      transform: scale(1) translateY(2px);
+      transform: scale(1.05);
     }
     100% {
       opacity: 1;
-      transform: scale(1) translateY(0);
+      transform: scale(1);
     }
   }
   
-  /* Sparkle particles */
-  .sparkle-container {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    overflow: hidden;
-  }
-  
-  .sparkle {
-    position: absolute;
-    left: var(--x);
-    top: var(--y);
-    width: 6px;
-    height: 6px;
-    background: white;
-    border-radius: 50%;
-    animation: sparkleAnim 0.8s ease-out var(--delay) forwards;
-    opacity: 0;
-    box-shadow: 0 0 6px 2px rgba(255, 215, 0, 0.8), 0 0 12px 4px rgba(255, 215, 0, 0.4);
-  }
-  
-  .sparkle::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 12px;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, white, transparent);
-    transform: translate(-50%, -50%);
-  }
-  
-  .sparkle::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 2px;
-    height: 12px;
-    background: linear-gradient(180deg, transparent, white, transparent);
-    transform: translate(-50%, -50%);
-  }
-  
-  @keyframes sparkleAnim {
+  @keyframes totalWinExit {
     0% {
-      opacity: 0;
-      transform: scale(0) rotate(0deg);
-    }
-    20% {
       opacity: 1;
-      transform: scale(1.5) rotate(45deg);
+      transform: scale(1);
     }
     100% {
       opacity: 0;
-      transform: scale(0.5) rotate(180deg) translateY(-30px);
+      transform: scale(0.7);
     }
   }
+  
 </style>
