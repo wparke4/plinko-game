@@ -120,7 +120,7 @@ export class PlinkoSlotEngine {
   }> = [];
   private currentCelebrationIndex = -1;
   private celebrationStartTime = 0;
-  private static readonly CELEBRATION_DURATION = 1125; // ms per win celebration
+  private static readonly CELEBRATION_DURATION = 1350; // ms per win celebration
   private static readonly ALL_PEGS_CELEBRATION_DURATION = 2250; // 2x duration for all pegs bonus
   
   // Sparkle particle system
@@ -139,7 +139,7 @@ export class PlinkoSlotEngine {
     twinkleOffset: number; // For glistening effect
   }> = [];
   private lastSparkleSpawn = 0;
-  private static readonly SPARKLE_SPAWN_RATE = 15; // ms between spawns per peg (faster = more particles)
+  private static readonly SPARKLE_SPAWN_RATE = 20; // ms between spawns per peg (faster = more particles)
   
   // Symbol definitions - easy to add more symbols here!
   // Each symbol has: id, name, color (for glow), payouts by count
@@ -402,7 +402,7 @@ export class PlinkoSlotEngine {
           vx,
           vy,
           size: 3 + Math.random() * 5,
-          alpha: 0.85 + Math.random() * 0.15,
+          alpha: 0.55 + Math.random() * 0.15,
           color,
           rotation: Math.random() * Math.PI * 2,
           rotationSpeed: (Math.random() - 0.5) * 0.4,

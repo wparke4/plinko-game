@@ -4,7 +4,7 @@
   
   "board": {
     "rows": 5,
-    "ballCount": 20,
+    "ballCount": 10,
     "maxPegLevel": 10
   },
 
