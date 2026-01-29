@@ -26,6 +26,7 @@
   import ghostSvg from '$lib/assets/slot/ghost.svg';
   import laughSvg from '$lib/assets/slot/laugh.svg';
   import bonusSvg from '$lib/assets/slot/bonus.svg';
+  import playButtonSvg from '$lib/assets/slot/button.svg';
   
   const SYMBOL_SVGS: Record<number, string> = {
     1: orangeSvg,
@@ -130,7 +131,7 @@
   let freeSpinsCompletePhase = $state<'incrementing' | 'holding' | 'exiting'>('incrementing');
   
   // Progressive mode state
-  let progressiveMode = $state(false);
+  let progressiveMode = $state(true); // Default to progressive mode ON
   let isInProgressiveSequence = $state(false);
   let progressiveWaveNumber = $state(0);
   let progressiveTotalWinnings = $state(0);
@@ -184,27 +185,37 @@
         // Check if we need to remove the oldest entry (at the end of array)
         const nonExitingEntries = winEntries.filter(e => !e.isExiting);
         if (nonExitingEntries.length >= MAX_WIN_ENTRIES) {
-          // Mark the oldest entry as exiting
+          // Mark the oldest entry as exiting FIRST
           const oldestId = nonExitingEntries[nonExitingEntries.length - 1].id;
           winEntries = winEntries.map(e => 
             e.id === oldestId ? { ...e, isExiting: true } : e
           );
           
-          // Remove the exiting entry after animation completes
+          // Wait for push-down animation, then add new entry
           setTimeout(() => {
+            // Remove the old entry
             winEntries = winEntries.filter(e => e.id !== oldestId);
-          }, 400);
+            // Add new entry at the beginning (newest at top)
+            winEntries = [newEntry, ...winEntries];
+            
+            // Remove the "new" flag after animation completes
+            setTimeout(() => {
+              winEntries = winEntries.map(e => 
+                e.id === newEntry.id ? { ...e, isNew: false } : e
+              );
+            }, 600);
+          }, 300);
+        } else {
+          // No need to remove, just add new entry
+          winEntries = [newEntry, ...winEntries];
+          
+          // Remove the "new" flag after animation completes
+          setTimeout(() => {
+            winEntries = winEntries.map(e => 
+              e.id === newEntry.id ? { ...e, isNew: false } : e
+            );
+          }, 600);
         }
-        
-        // Add new entry at the beginning (newest at top)
-        winEntries = [newEntry, ...winEntries];
-        
-        // Remove the "new" flag after animation completes
-        setTimeout(() => {
-          winEntries = winEntries.map(e => 
-            e.id === newEntry.id ? { ...e, isNew: false } : e
-          );
-        }, 600);
         
         // Show total win container and animate the amount
         if (!showTotalWin) {
@@ -361,22 +372,37 @@
         // Check if we need to remove the oldest entry
         const nonExitingEntries = winEntries.filter(e => !e.isExiting);
         if (nonExitingEntries.length >= MAX_WIN_ENTRIES) {
+          // Mark the oldest entry as exiting FIRST
           const oldestId = nonExitingEntries[nonExitingEntries.length - 1].id;
           winEntries = winEntries.map(e => 
             e.id === oldestId ? { ...e, isExiting: true } : e
           );
+          
+          // Wait for push-down animation, then add new entry
           setTimeout(() => {
+            // Remove the old entry
             winEntries = winEntries.filter(e => e.id !== oldestId);
-          }, 400);
+            // Add new entry at the beginning (newest at top)
+            winEntries = [newEntry, ...winEntries];
+            
+            // Remove the "new" flag after animation completes
+            setTimeout(() => {
+              winEntries = winEntries.map(e => 
+                e.id === newEntry.id ? { ...e, isNew: false } : e
+              );
+            }, 600);
+          }, 300);
+        } else {
+          // No need to remove, just add new entry
+          winEntries = [newEntry, ...winEntries];
+          
+          // Remove the "new" flag after animation completes
+          setTimeout(() => {
+            winEntries = winEntries.map(e => 
+              e.id === newEntry.id ? { ...e, isNew: false } : e
+            );
+          }, 600);
         }
-        
-        winEntries = [newEntry, ...winEntries];
-        
-        setTimeout(() => {
-          winEntries = winEntries.map(e => 
-            e.id === newEntry.id ? { ...e, isNew: false } : e
-          );
-        }, 600);
         
         // Show total win display
         if (!showTotalWin) {
@@ -737,39 +763,6 @@
       </div>
     </div>
     
-    <!-- Progressive Mode Toggle -->
-    <div class="mb-12">
-      <label class="flex items-center justify-between cursor-pointer group">
-        <div>
-          <span class="text-sm font-medium text-neutral-400 uppercase tracking-wide group-hover:text-neutral-300 transition-colors">Progressive Mode</span>
-          <p class="text-xs text-neutral-500 mt-0.5">Cascade wins for bigger payouts</p>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={progressiveMode}
-          disabled={isRunning || isInProgressiveSequence}
-          onclick={() => progressiveMode = !progressiveMode}
-          class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-neutral-950 disabled:opacity-50 disabled:cursor-not-allowed
-            {progressiveMode ? 'bg-green-500' : 'bg-neutral-700'}"
-        >
-          <span
-            class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out
-              {progressiveMode ? 'translate-x-5' : 'translate-x-0'}"
-          />
-        </button>
-      </label>
-    </div>
-
-    <!-- Play Button -->
-    <button
-      onclick={handlePlay}
-      disabled={!canPlay}
-      class="w-full rounded-lg bg-green-500 py-4 text-lg font-bold text-slate-900 transition-all hover:bg-green-400 active:bg-green-600 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed mb-6"
-    >
-      Play
-    </button>
-
     <!-- Spacer to push wins to bottom -->
     <div class="flex-1"></div>
 
@@ -805,7 +798,7 @@
   </div>
 
   <!-- Center: Game Board -->
-  <div class="flex-1 flex flex-col items-center justify-center bg-black p-4">
+  <div class="flex-1 flex flex-col items-center justify-center bg-black p-4 pb-[140px] pr-[120px]">
     <!-- Free Spins Remaining Indicator (above the win container) -->
     {#if isInFreeSpins}
       <div class="mb-2">
@@ -822,23 +815,6 @@
     {/if}
     
     
-    <!-- Total Win Container (above the board) -->
-    <div class="relative h-24 mb-4 {isInFreeSpins ? '' : 'mt-8'}" style:width="{WIDTH}px">
-      {#if showTotalWin}
-        <div 
-          class="total-win-container absolute inset-0 flex flex-col items-center justify-center
-            {totalWinExiting ? 'total-win-exit' : 'total-win-enter'}"
-        >
-          <div class="total-win-label text-sm font-medium text-neutral-400 uppercase tracking-wider mb-1">
-            Win
-          </div>
-          <div class="total-win-amount text-2xl font-semibold text-emerald-400/90">
-            ${displayedWinAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-        </div>
-      {/if}
-    </div>
-    
     <div class="relative" style:width="{WIDTH}px" style:height="{HEIGHT}px">
       {#if engine === null}
         <div class="absolute inset-0 flex items-center justify-center">
@@ -854,6 +830,34 @@
     </div>
   </div>
 </div>
+
+<!-- Total Win Container - Fixed, centered under game board -->
+{#if showTotalWin}
+  <div 
+    class="total-win-container fixed bottom-4 z-30 w-44 py-2 px-4 flex items-center
+      bg-neutral-900/90 border border-neutral-700 rounded-lg shadow-lg
+      {totalWinExiting ? 'total-win-exit' : 'total-win-enter'}"
+    style="left: calc(50% + 4px); transform: translateX(-50%);"
+  >
+    <div class="total-win-label text-xs font-medium text-neutral-400 uppercase tracking-wider w-12 flex-shrink-0">
+      Win
+    </div>
+    <div class="total-win-amount text-lg font-semibold text-emerald-400/90 text-left flex-1">
+      ${displayedWinAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+    </div>
+  </div>
+{/if}
+
+<!-- Fixed Play Button - Bottom Right Corner -->
+<button
+  onclick={handlePlay}
+  disabled={!canPlay}
+  class="play-button-overlay fixed bottom-8 right-14 w-32 h-32 transition-all duration-200 z-30
+    {canPlay ? 'opacity-100 hover:scale-110 active:scale-95 cursor-pointer' : 'opacity-30 cursor-not-allowed'}"
+  aria-label="Play"
+>
+  <img src={playButtonSvg} alt="Play" class="w-full h-full" />
+</button>
 
 <!-- Bonus Transition Overlay -->
 {#if showBonusTransition}
@@ -945,6 +949,30 @@
             class="w-full rounded-lg bg-neutral-800 border border-neutral-700 pl-8 pr-4 py-3 text-white text-lg font-medium focus:outline-none focus:border-neutral-500 focus:ring-1 focus:ring-neutral-500 transition-colors"
           />
         </div>
+      </div>
+      
+      <!-- Progressive Mode Toggle -->
+      <div class="mb-6">
+        <label class="flex items-center justify-between cursor-pointer group">
+          <div>
+            <span class="text-sm font-medium text-neutral-400 uppercase tracking-wide group-hover:text-neutral-300 transition-colors">Progressive Mode</span>
+            <p class="text-xs text-neutral-500 mt-0.5">Cascade wins for bigger payouts</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={progressiveMode}
+            disabled={isRunning || isInProgressiveSequence}
+            onclick={() => progressiveMode = !progressiveMode}
+            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed
+              {progressiveMode ? 'bg-green-500' : 'bg-neutral-700'}"
+          >
+            <span
+              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out
+                {progressiveMode ? 'translate-x-5' : 'translate-x-0'}"
+            ></span>
+          </button>
+        </label>
       </div>
       
       <button
@@ -1046,10 +1074,26 @@
     -moz-appearance: textfield;
   }
   
+  /* Play button overlay */
+  .play-button-overlay {
+    z-index: 10;
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.3));
+  }
+  
+  .play-button-overlay:not(:disabled):hover {
+    filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.5));
+  }
+  
+  .play-button-overlay:not(:disabled):active {
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.4));
+  }
+  
   /* Win entry - simplified, subtle styling */
   .win-entry {
     position: relative;
     transition: all 0.3s ease;
+    /* Smooth position changes when other entries are added/removed */
+    transform: translateY(0);
   }
   
   .win-entry-new-subtle {

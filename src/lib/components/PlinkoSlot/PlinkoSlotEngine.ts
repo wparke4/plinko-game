@@ -190,6 +190,7 @@ export class PlinkoSlotEngine {
   private static readonly BONUS_SPAWN_CHANCE = 1 / 200; // 1 in 200 chance per hit
   static readonly BONUS_PEGS_REQUIRED = 3; // Number of bonus pegs needed to trigger bonus game
   static readonly FREE_SPINS_AWARDED = 5; // Number of free spins awarded
+  static readonly MIN_SYMBOLS_FOR_WIN = 4; // Minimum matching symbols required for a win
   private static readonly BONUS_CELEBRATION_DURATION = 2250; // Longer duration for bonus celebration
   
   // Track which pegs have the bonus symbol (locked pegs)
@@ -715,10 +716,10 @@ export class PlinkoSlotEngine {
       }
     }
     
-    // Check for wins (4+ of same symbol)
+    // Check for wins (MIN_SYMBOLS_FOR_WIN+ of same symbol)
     for (const [level, pegIds] of symbolPegs) {
       const count = pegIds.length;
-      if (count >= 4) {
+      if (count >= PlinkoSlotEngine.MIN_SYMBOLS_FOR_WIN) {
         const payoutTable = PlinkoSlotEngine.getSymbolPayouts(level);
         // Get the multiplier for this count (cap at max defined)
         const maxCount = Math.min(count, 8);
@@ -2012,10 +2013,10 @@ export class PlinkoSlotEngine {
       }
     }
     
-    // Check for wins (4+ of same symbol)
+    // Check for wins (MIN_SYMBOLS_FOR_WIN+ of same symbol)
     for (const [level, pegIds] of symbolPegs) {
       const count = pegIds.length;
-      if (count >= 4) {
+      if (count >= PlinkoSlotEngine.MIN_SYMBOLS_FOR_WIN) {
         const payoutTable = PlinkoSlotEngine.getSymbolPayouts(level);
         // Get the multiplier for this count (cap at max defined)
         const maxCount = Math.min(count, 8);
@@ -2035,6 +2036,8 @@ export class PlinkoSlotEngine {
   
   /**
    * Start a celebration for a progressive win (single win animation).
+   * Note: Does NOT call onWinCelebration - progressive mode uses onProgressiveWin instead
+   * to avoid duplicate win entries.
    */
   private startProgressiveWinCelebration(
     win: { symbolLevel: number; pegIds: string[]; multiplier: number },
@@ -2053,12 +2056,8 @@ export class PlinkoSlotEngine {
     this.currentCelebrationIndex = 0;
     this.celebrationStartTime = Date.now();
     
-    // Notify callback
-    this.callbacks.onWinCelebration?.(
-      win.symbolLevel,
-      win.pegIds.length,
-      win.multiplier
-    );
+    // Note: onProgressiveWin is called separately in processProgressiveWave()
+    // so we don't call onWinCelebration here to avoid duplicate entries
     
     // Schedule end of celebration
     setTimeout(() => {
