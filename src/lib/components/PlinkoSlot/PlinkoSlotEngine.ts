@@ -203,7 +203,7 @@ export class PlinkoSlotEngine {
   // Progressive mode state
   private progressiveMode = false;
   private progressiveState: ProgressiveState | null = null;
-  private lockedPegs: Set<string> = new Set();
+  private lockedPegs: Map<string, number> = new Map(); // pegId -> lock timestamp
   
   // Explosion particle system
   private explosionParticles: Array<{
@@ -353,18 +353,17 @@ export class PlinkoSlotEngine {
    * Set up custom rendering for ring effects (rendered UNDER balls).
    */
   private setupRingEffectRendering(): void {
-    // Use beforeRender to draw rings, then Matter.js draws bodies on top
+    // Use beforeRender to clear and draw background
     Matter.Events.on(this.render, 'beforeRender', () => {
       // Clear and draw background first
       this.ctx.fillStyle = '#000000';
       this.ctx.fillRect(0, 0, PlinkoSlotEngine.WIDTH, PlinkoSlotEngine.HEIGHT);
-      
-      // Draw ring effects (under everything)
-      this.renderRingEffects();
     });
     
-    // Use afterRender to draw SVG symbols on top of pegs
+    // Use afterRender to draw everything on top of Matter.js bodies
     Matter.Events.on(this.render, 'afterRender', () => {
+      // Ring effects first (under balls/symbols but over peg bodies)
+      this.renderRingEffects();
       this.renderBalls();
       this.renderPegSymbols();
       this.updateAndRenderSparkles();
@@ -1045,7 +1044,8 @@ export class PlinkoSlotEngine {
           
           // Draw metallic/steel outline for locked pegs in progressive mode
           if (isLockedProgressive) {
-            this.renderLockedPegOutline(peg.x, peg.y, pinRadius, now);
+            const lockTime = this.lockedPegs.get(pegId) || now;
+            this.renderLockedPegOutline(peg.x, peg.y, pinRadius, now, lockTime);
           }
           
           // Calculate aspect ratio and fit within the circle
@@ -1091,12 +1091,26 @@ export class PlinkoSlotEngine {
   }
   
   /**
-   * Render a metallic/steel outline around a locked peg.
+   * Render a metallic/steel outline around a locked peg with fade-in animation.
    */
-  private renderLockedPegOutline(x: number, y: number, radius: number, now: number): void {
+  private renderLockedPegOutline(x: number, y: number, radius: number, now: number, lockTime: number): void {
     const ctx = this.ctx;
-    const outlineRadius = radius * 1.25;
+    
+    // Ease-in animation over 400ms
+    const animationDuration = 400;
+    const timeSinceLock = now - lockTime;
+    const animationProgress = Math.min(1, timeSinceLock / animationDuration);
+    
+    // Ease-out cubic for smooth appearance
+    const easeOutCubic = 1 - Math.pow(1 - animationProgress, 3);
+    
+    // Scale animation: starts at 1.5x and settles to 1x
+    const scaleMultiplier = 1 + (0.5 * (1 - easeOutCubic));
+    const outlineRadius = radius * 1.25 * scaleMultiplier;
     const lineWidth = radius * 0.15;
+    
+    // Opacity fades in
+    const opacity = easeOutCubic;
     
     // Subtle shimmer animation
     const shimmerSpeed = 2000;
@@ -1104,6 +1118,7 @@ export class PlinkoSlotEngine {
     const shimmerAngle = shimmerProgress * Math.PI * 2;
     
     ctx.save();
+    ctx.globalAlpha = opacity;
     
     // Create metallic gradient for the outline
     const gradient = ctx.createLinearGradient(
@@ -1176,8 +1191,8 @@ export class PlinkoSlotEngine {
       const baseEndRadius = effect.isOuter ? 40 * scale : 28 * scale;
       const radius = baseStartRadius + (baseEndRadius - baseStartRadius) * easeOut;
       
-      // Alpha with smooth fade
-      const baseAlpha = effect.isOuter ? 0.5 : 0.8;
+      // Alpha with smooth fade (reduced to 50% of original)
+      const baseAlpha = effect.isOuter ? 0.25 : 0.1;
       const alpha = baseAlpha * (1 - easeOut);
       
       // Line width - thicker for inner ring, thins as it expands
@@ -1195,7 +1210,7 @@ export class PlinkoSlotEngine {
       
       // Add subtle glow for the inner ring at the start
       if (!effect.isOuter && progress < 0.3) {
-        const glowAlpha = 0.3 * (1 - progress / 0.3);
+        const glowAlpha = 0.15 * (1 - progress / 0.3);
         ctx.globalAlpha = glowAlpha;
         ctx.shadowColor = effect.color;
         ctx.shadowBlur = 15 * scale;
@@ -1606,19 +1621,12 @@ export class PlinkoSlotEngine {
     // Increment hit count on every hit (same ball can level up multiple times)
     peg.hitCount++;
     
-    // Add ring effect for the hit
-    this.addRingEffect(peg.x, peg.y, this.config.pegColors['0']);
-    
     // Check if this peg is locked in progressive mode (cannot be changed)
     const isLockedInProgressive = this.progressiveMode && this.lockedPegs.has(pegId);
     
     // Check if this peg has the bonus symbol (locked - cannot be changed)
     if (this.bonusPegs.has(pegId) || isLockedInProgressive) {
-      // Locked pegs just update the ring color and record the hit
-      if (this.ringEffects.length > 0) {
-        const lastRing = this.ringEffects[this.ringEffects.length - 1];
-        lastRing.color = PlinkoSlotEngine.getSymbolColor(peg.level);
-      }
+      // Locked pegs - no ring effect, symbol doesn't change
     } else {
       // Check for bonus symbol spawn (1 in 200 chance, but not during free spins)
       const canSpawnBonus = !this.isFreeSpinsMode;
@@ -1639,11 +1647,9 @@ export class PlinkoSlotEngine {
       // Update visual
       this.updatePegVisual(pegId, peg.level);
       
-      // Update ring color to match new symbol
-      if (this.ringEffects.length > 0) {
-        const lastRing = this.ringEffects[this.ringEffects.length - 1];
-        lastRing.color = PlinkoSlotEngine.getSymbolColor(peg.level);
-      }
+      // Add ring effect only when symbol changes (unlocked pegs)
+      const symbolColor = PlinkoSlotEngine.getSymbolColor(peg.level);
+      this.addRingEffect(peg.x, peg.y, symbolColor);
     }
     
     // Record in ball's hit list
@@ -2105,10 +2111,11 @@ export class PlinkoSlotEngine {
     
     const newlyLocked: string[] = [];
     
+    const lockTime = Date.now();
     for (const [pegId, peg] of this.pegs) {
       // Lock pegs that have symbols and aren't already locked
       if (peg.level > 0 && !this.lockedPegs.has(pegId)) {
-        this.lockedPegs.add(pegId);
+        this.lockedPegs.set(pegId, lockTime);
         this.progressiveState.lockedPegIds.add(pegId);
         newlyLocked.push(pegId);
       }
