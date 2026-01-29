@@ -137,6 +137,14 @@
   let progressiveTotalWinnings = $state(0);
   let progressiveWaveWins = $state<ProgressiveWaveWin[]>([]);
   
+  // Multiplier wheel state (12 positions, each doubling: x1, x2, x4, x8, ...)
+  const WHEEL_MULTIPLIERS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048];
+  let multiplierWheelEnabled = $state(false); // OFF by default
+  let wheelPosition = $state(0); // Index into WHEEL_MULTIPLIERS (0 = x1)
+  let wheelRotation = $state(0); // Current rotation in degrees
+  let isWheelSpinning = $state(false);
+  let currentMultiplier = $derived(multiplierWheelEnabled ? WHEEL_MULTIPLIERS[wheelPosition % 12] : 1);
+  
   // Derived
   let isRunning = $derived(gamePhase === 'dropping' || gamePhase === 'evaluating');
   let canPlay = $derived(!isRunning && !isCelebrating && !isInFreeSpins && !isInProgressiveSequence && !showBonusTransition && !showFreeSpinsComplete && balance >= betAmount && betAmount > 0);
@@ -355,16 +363,24 @@
       },
       onProgressiveWin: (win, totalAccumulated) => {
         isCelebrating = true;
-        progressiveTotalWinnings = totalAccumulated;
-        progressiveWaveWins = [...progressiveWaveWins, win];
         
-        // Add win entry to sidebar
+        // Apply wheel multiplier to the win
+        const wheelMultiplier = currentMultiplier;
+        const multipliedPayout = win.payout * wheelMultiplier;
+        const multipliedWin = { ...win, payout: multipliedPayout };
+        
+        // Update accumulated total with multiplied amount
+        const multiplierBonus = win.payout * (wheelMultiplier - 1);
+        progressiveTotalWinnings = totalAccumulated + multiplierBonus;
+        progressiveWaveWins = [...progressiveWaveWins, multipliedWin];
+        
+        // Add win entry to sidebar with multiplied payout
         const newEntry: WinEntry = {
           id: ++winEntryIdCounter,
           symbolLevel: win.symbolLevel,
           count: win.count,
-          multiplier: win.multiplier,
-          payout: win.payout,
+          multiplier: win.multiplier * wheelMultiplier,
+          payout: multipliedPayout,
           isNew: true,
           isExiting: false,
         };
@@ -417,14 +433,24 @@
           }
         }
         
-        // Update total and animate
+        // Update total and animate (use our multiplied total)
         const previousTotal = totalWinAmount;
-        totalWinAmount = totalAccumulated;
+        totalWinAmount = progressiveTotalWinnings;
         animateWinIncrement(previousTotal, totalWinAmount, 1000);
       },
       onProgressiveExplosion: (pegIds, symbolLevel) => {
         // Visual feedback handled by engine
         isCelebrating = false;
+        
+        // Rotate the wheel to bring next segment to left edge (counter-clockwise in SVG)
+        isWheelSpinning = true;
+        wheelPosition = (wheelPosition + 1) % 12;
+        wheelRotation = -wheelPosition * 30; // 30 degrees per segment, negative brings next segment to left
+        
+        // Stop spinning animation after transition
+        setTimeout(() => {
+          isWheelSpinning = false;
+        }, 500);
       },
       onProgressivePegsLocked: (lockedPegIds) => {
         // Visual feedback handled by engine (metallic outline)
@@ -432,8 +458,8 @@
       onProgressiveSequenceComplete: (totalWinnings, waveCount) => {
         isInProgressiveSequence = false;
         
-        // Add all progressive winnings to balance
-        balance += totalWinnings;
+        // Add all progressive winnings to balance (use our multiplied total)
+        balance += progressiveTotalWinnings;
         
         // Keep win display visible for a bit longer, then hide
         if (showTotalWin) {
@@ -654,6 +680,11 @@
     progressiveTotalWinnings = 0;
     progressiveWaveWins = [];
     
+    // Reset multiplier wheel
+    wheelPosition = 0;
+    wheelRotation = 0;
+    isWheelSpinning = false;
+    
     // Instantly hide total win display when starting new game
     hideTotalWinInstantly();
     
@@ -848,6 +879,74 @@
   </div>
 {/if}
 
+<!-- Multiplier Wheel - Right side, vertically centered (visible when enabled in progressive mode) -->
+{#if progressiveMode && multiplierWheelEnabled}
+  <div class="fixed top-1/2 -translate-y-1/2 z-50" style="width: 100px; height: 300px; right: -70px;">
+    <!-- Wheel container - no overflow hidden, use fade gradients instead -->
+    <div class="absolute inset-0">
+      <!-- The rotating wheel -->
+      <svg 
+        width="450" 
+        height="450" 
+        viewBox="0 0 500 500"
+        class="absolute transition-transform duration-500 ease-out"
+        style="right: -260px; top: 50%; transform: translateY(-50%) rotate({wheelRotation}deg);"
+      >
+        <!-- Wheel background -->
+        <circle cx="250" cy="250" r="240" fill="#1a1a1a" stroke="#333" stroke-width="4"/>
+        
+        <!-- Segment dividers and text (offset by -15° so segment center aligns with arrow) -->
+        {#each WHEEL_MULTIPLIERS as mult, i}
+          {@const angle = i * 30 + 165}
+          {@const nextAngle = (i + 1) * 30 + 165}
+          {@const midAngle = angle + 15}
+          {@const isActive = i === wheelPosition % 12}
+          {@const textRadius = 180}
+          {@const textX = 250 + textRadius * Math.cos(midAngle * Math.PI / 180)}
+          {@const textY = 250 + textRadius * Math.sin(midAngle * Math.PI / 180)}
+          
+          <!-- Segment divider line -->
+          <line 
+            x1="250" 
+            y1="250" 
+            x2={250 + 240 * Math.cos(angle * Math.PI / 180)} 
+            y2={250 + 240 * Math.sin(angle * Math.PI / 180)}
+            stroke="#333"
+            stroke-width="2"
+          />
+          
+          <!-- Segment background for active -->
+          {#if isActive}
+            <path
+              d="M 250 250 L {250 + 240 * Math.cos(angle * Math.PI / 180)} {250 + 240 * Math.sin(angle * Math.PI / 180)} A 240 240 0 0 1 {250 + 240 * Math.cos(nextAngle * Math.PI / 180)} {250 + 240 * Math.sin(nextAngle * Math.PI / 180)} Z"
+              fill="rgba(234, 179, 8, 0.2)"
+            />
+          {/if}
+          
+          <!-- Multiplier text - oriented to read from edge toward center -->
+          <text
+            x={textX}
+            y={textY}
+            text-anchor="middle"
+            dominant-baseline="middle"
+            transform="rotate({midAngle - 180}, {textX}, {textY})"
+            class="font-bold select-none"
+            fill={isActive ? '#facc15' : '#6b7280'}
+            font-size={isActive ? '28' : '22'}
+          >
+            x{mult.toLocaleString()}
+          </text>
+        {/each}
+        
+        <!-- Center hub -->
+        <circle cx="250" cy="250" r="50" fill="#262626" stroke="#404040" stroke-width="4"/>
+        <circle cx="250" cy="250" r="30" fill="#1a1a1a" stroke="#333" stroke-width="2"/>
+      </svg>
+    </div>
+    
+  </div>
+{/if}
+
 <!-- Fixed Play Button - Bottom Right Corner -->
 <button
   onclick={handlePlay}
@@ -952,7 +1051,7 @@
       </div>
       
       <!-- Progressive Mode Toggle -->
-      <div class="mb-6">
+      <div class="mb-4">
         <label class="flex items-center justify-between cursor-pointer group">
           <div>
             <span class="text-sm font-medium text-neutral-400 uppercase tracking-wide group-hover:text-neutral-300 transition-colors">Progressive Mode</span>
@@ -970,6 +1069,30 @@
             <span
               class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out
                 {progressiveMode ? 'translate-x-5' : 'translate-x-0'}"
+            ></span>
+          </button>
+        </label>
+      </div>
+      
+      <!-- Multiplier Wheel Toggle -->
+      <div class="mb-6">
+        <label class="flex items-center justify-between cursor-pointer group">
+          <div>
+            <span class="text-sm font-medium text-neutral-400 uppercase tracking-wide group-hover:text-neutral-300 transition-colors">Multiplier Wheel</span>
+            <p class="text-xs text-neutral-500 mt-0.5">Multiply progressive wins (x1, x2, x4...)</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={multiplierWheelEnabled}
+            disabled={isRunning || isInProgressiveSequence}
+            onclick={() => multiplierWheelEnabled = !multiplierWheelEnabled}
+            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed
+              {multiplierWheelEnabled ? 'bg-green-500' : 'bg-neutral-700'}"
+          >
+            <span
+              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out
+                {multiplierWheelEnabled ? 'translate-x-5' : 'translate-x-0'}"
             ></span>
           </button>
         </label>
@@ -1132,6 +1255,29 @@
     background: radial-gradient(ellipse at center, rgba(34, 197, 94, 0.15) 0%, transparent 70%);
     border-radius: 16px;
     overflow: visible;
+  }
+  
+  /* Multiplier Wheel */
+  .multiplier-wheel {
+    background: radial-gradient(circle at center, #1a1a1a 0%, #0a0a0a 60%, transparent 70%);
+    border-radius: 50%;
+    box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 0, 0, 0.5);
+  }
+  
+  .multiplier-wheel::before {
+    content: '';
+    position: absolute;
+    inset: 10px;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .multiplier-wheel::after {
+    content: '';
+    position: absolute;
+    inset: 30px;
+    border-radius: 50%;
+    border: 2px dashed rgba(255, 255, 255, 0.05);
   }
   
   .total-win-enter {
