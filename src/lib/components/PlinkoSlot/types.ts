@@ -247,3 +247,38 @@ export interface RunHistoryEntry {
   highestTier: string | null;
   patternsHit: string[];
 }
+
+/**
+ * Progressive mode state tracking.
+ * In progressive mode, only the highest win is awarded per wave,
+ * winning symbols explode, and remaining symbols are locked for
+ * subsequent waves.
+ */
+export interface ProgressiveState {
+  /** Whether progressive mode is active */
+  isActive: boolean;
+  /** Current wave number (starts at 1) */
+  waveNumber: number;
+  /** Set of peg IDs that are locked (won't change on ball hits) */
+  lockedPegIds: Set<string>;
+  /** Set of peg IDs that are empty (winning symbols exploded) */
+  emptyPegIds: Set<string>;
+  /** Total accumulated winnings across all waves */
+  accumulatedWinnings: number;
+  /** History of wins in this progressive sequence */
+  waveWins: ProgressiveWaveWin[];
+  /** Whether the progressive sequence has ended */
+  isComplete: boolean;
+}
+
+/**
+ * A single win in a progressive wave.
+ */
+export interface ProgressiveWaveWin {
+  waveNumber: number;
+  symbolLevel: number;
+  count: number;
+  multiplier: number;
+  payout: number;
+  pegIds: string[];
+}
