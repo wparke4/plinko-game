@@ -135,7 +135,7 @@ export class PlinkoSlotEngine {
   }> = [];
   private currentCelebrationIndex = -1;
   private celebrationStartTime = 0;
-  private static readonly CELEBRATION_DURATION = 1350; // ms per win celebration
+  private static readonly CELEBRATION_DURATION = 1150; // ms per win celebration
   private static readonly ALL_PEGS_CELEBRATION_DURATION = 2250; // 2x duration for all pegs bonus
   
   // Sparkle particle system
@@ -222,7 +222,7 @@ export class PlinkoSlotEngine {
   }> = [];
   
   // Progressive mode timing
-  private static readonly EXPLOSION_DURATION = 800; // ms for explosion animation
+  private static readonly EXPLOSION_DURATION = 400; // ms for explosion animation
   private static readonly PROGRESSIVE_WAVE_DELAY = 1200; // ms delay before next wave
   
   // Helper to get symbol by ID (including bonus symbol)
