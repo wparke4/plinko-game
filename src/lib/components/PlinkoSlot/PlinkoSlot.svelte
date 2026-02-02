@@ -25,8 +25,12 @@
   import faceSvg from '$lib/assets/slot/face.svg';
   import ghostSvg from '$lib/assets/slot/ghost.svg';
   import laughSvg from '$lib/assets/slot/laugh.svg';
-  import bonusSvg from '$lib/assets/slot/bonus.svg';
-  import playButtonSvg from '$lib/assets/slot/button.svg';
+import bonusSvg from '$lib/assets/slot/bonus.svg';
+import playButtonSvg from '$lib/assets/slot/button.svg';
+
+// Import audio files
+import backgroundMusicSrc from '$lib/assets/slot/song1.mp3';
+import plopSoundSrc from '$lib/assets/slot/plop.mp3';
   
   const SYMBOL_SVGS: Record<number, string> = {
     1: orangeSvg,
@@ -145,9 +149,55 @@
   let isWheelSpinning = $state(false);
   let currentMultiplier = $derived(multiplierWheelEnabled ? WHEEL_MULTIPLIERS[wheelPosition % 12] : 1);
   
+  // Reveal mode state (pegs charge up and reveal symbol on first hit)
+  let revealModeEnabled = $state(false); // OFF by default (normal mode)
+  
   // Derived
   let isRunning = $derived(gamePhase === 'dropping' || gamePhase === 'evaluating');
   let canPlay = $derived(!isRunning && !isCelebrating && !isInFreeSpins && !isInProgressiveSequence && !showBonusTransition && !showFreeSpinsComplete && balance >= betAmount && betAmount > 0);
+  
+  // Audio setup
+  let backgroundMusic: HTMLAudioElement | null = null;
+  let plopSound: HTMLAudioElement | null = null;
+  let audioInitialized = false;
+  
+  function initAudio() {
+    if (audioInitialized) return;
+    audioInitialized = true;
+    
+    // Background music - looping at 50% volume
+    backgroundMusic = new Audio(backgroundMusicSrc);
+    backgroundMusic.loop = true;
+    backgroundMusic.volume = 0.5;
+    backgroundMusic.play().catch(() => {
+      // Audio autoplay may be blocked, will start on user interaction
+    });
+    
+    // Plop sound effect
+    plopSound = new Audio(plopSoundSrc);
+    plopSound.volume = 0.7;
+  }
+  
+  function playPlopSound() {
+    if (!plopSound) return;
+    // Clone the audio to allow overlapping sounds
+    const sound = plopSound.cloneNode() as HTMLAudioElement;
+    sound.volume = 0.7;
+    sound.play().catch(() => {});
+  }
+  
+  // Initialize audio on first user interaction
+  function handleFirstInteraction() {
+    initAudio();
+    document.removeEventListener('click', handleFirstInteraction);
+    document.removeEventListener('keydown', handleFirstInteraction);
+  }
+  
+  // Set up listeners for first interaction (to bypass autoplay restrictions)
+  if (typeof document !== 'undefined') {
+    document.addEventListener('click', handleFirstInteraction);
+    document.addEventListener('keydown', handleFirstInteraction);
+  }
   
   // Initialize engine
   const initEngine: Action<HTMLCanvasElement> = (node) => {
@@ -157,6 +207,10 @@
     engine.setCallbacks({
       onPegHit: (pegId, newLevel, ballId) => {
         // Could trigger visual effects here
+      },
+      onSymbolChanged: (pegId, newLevel) => {
+        // Play plop sound when a symbol changes
+        playPlopSound();
       },
       onBallDropped: (ballId, spawnX) => {
         currentBall = ballId;
@@ -694,6 +748,9 @@
     // Set progressive mode on engine
     engine.setProgressiveMode(progressiveMode);
     
+    // Set reveal mode on engine
+    engine.setRevealMode(revealModeEnabled);
+    
     // Update fair state
     const state = engine.getFairState();
     fairState = {
@@ -742,6 +799,16 @@
     }
     if (incrementAnimationFrame) {
       cancelAnimationFrame(incrementAnimationFrame);
+    }
+    // Clean up audio
+    if (backgroundMusic) {
+      backgroundMusic.pause();
+      backgroundMusic = null;
+    }
+    // Remove event listeners
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('click', handleFirstInteraction);
+      document.removeEventListener('keydown', handleFirstInteraction);
     }
   });
 </script>
@@ -1075,7 +1142,7 @@
       </div>
       
       <!-- Multiplier Wheel Toggle -->
-      <div class="mb-6">
+      <div class="mb-4">
         <label class="flex items-center justify-between cursor-pointer group">
           <div>
             <span class="text-sm font-medium text-neutral-400 uppercase tracking-wide group-hover:text-neutral-300 transition-colors">Multiplier Wheel</span>
@@ -1093,6 +1160,30 @@
             <span
               class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out
                 {multiplierWheelEnabled ? 'translate-x-5' : 'translate-x-0'}"
+            ></span>
+          </button>
+        </label>
+      </div>
+      
+      <!-- Reveal Mode Toggle -->
+      <div class="mb-6">
+        <label class="flex items-center justify-between cursor-pointer group">
+          <div>
+            <span class="text-sm font-medium text-neutral-400 uppercase tracking-wide group-hover:text-neutral-300 transition-colors">Reveal Mode</span>
+            <p class="text-xs text-neutral-500 mt-0.5">Pegs charge up and reveal on first hit</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={revealModeEnabled}
+            disabled={isRunning || isInProgressiveSequence}
+            onclick={() => revealModeEnabled = !revealModeEnabled}
+            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed
+              {revealModeEnabled ? 'bg-green-500' : 'bg-neutral-700'}"
+          >
+            <span
+              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out
+                {revealModeEnabled ? 'translate-x-5' : 'translate-x-0'}"
             ></span>
           </button>
         </label>

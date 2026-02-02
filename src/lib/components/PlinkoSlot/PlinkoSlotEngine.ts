@@ -51,6 +51,9 @@ const CATEGORY_WALL = 0x0004;
  */
 export interface PlinkoSlotCallbacks {
   onPegHit?: (pegId: string, newLevel: number, ballId: number) => void;
+  onSymbolChanged?: (pegId: string, newLevel: number) => void;
+  onPegChargeStart?: (pegId: string) => void;
+  onPegRevealed?: (pegId: string, symbolLevel: number) => void;
   onBallDropped?: (ballId: number, spawnX: number) => void;
   onBallExited?: (ballId: number) => void;
   onRunComplete?: (result: PayoutResult) => void;
@@ -204,6 +207,12 @@ export class PlinkoSlotEngine {
   private progressiveMode = false;
   private progressiveState: ProgressiveState | null = null;
   private lockedPegs: Map<string, number> = new Map(); // pegId -> lock timestamp
+  
+  // Reveal mode state
+  private revealMode = false;
+  private chargingPegs: Map<string, { startTime: number; targetSymbolId: number }> = new Map();
+  private revealedPegs: Set<string> = new Set(); // Pegs that have completed their reveal
+  private static readonly CHARGE_DURATION = 2000; // 2 second charge animation
   
   // Explosion particle system
   private explosionParticles: Array<{
@@ -1002,11 +1011,48 @@ export class PlinkoSlotEngine {
     const now = Date.now();
     
     // Maximum size the symbol can be (diameter of the peg, with slight padding)
-    const maxSize = pinRadius * 1.8;
+    // In reveal mode, symbols are 20% larger
+    const baseMaxSize = pinRadius * 1.8;
+    const revealMaxSize = pinRadius * 2.16; // 20% larger
+    
+    // Process charging pegs in reveal mode
+    if (this.revealMode) {
+      for (const [pegId, chargeData] of this.chargingPegs) {
+        const elapsed = now - chargeData.startTime;
+        if (elapsed >= PlinkoSlotEngine.CHARGE_DURATION) {
+          // Charging complete - reveal the symbol
+          const peg = this.pegs.get(pegId);
+          if (peg) {
+            peg.level = chargeData.targetSymbolId;
+            this.revealedPegs.add(pegId);
+            this.chargingPegs.delete(pegId);
+            this.callbacks.onPegRevealed?.(pegId, chargeData.targetSymbolId);
+            this.callbacks.onSymbolChanged?.(pegId, chargeData.targetSymbolId);
+          }
+        }
+      }
+    }
     
     for (const [pegId, peg] of this.pegs) {
       // Check if this peg is locked in progressive mode
       const isLockedProgressive = this.progressiveMode && this.lockedPegs.has(pegId);
+      
+      // In reveal mode, check if peg is charging
+      const isCharging = this.revealMode && this.chargingPegs.has(pegId);
+      const isRevealed = this.revealMode && this.revealedPegs.has(pegId);
+      
+      // Render charging animation
+      if (isCharging) {
+        const chargeData = this.chargingPegs.get(pegId)!;
+        const elapsed = now - chargeData.startTime;
+        const progress = Math.min(1, elapsed / PlinkoSlotEngine.CHARGE_DURATION);
+        
+        this.renderChargingAnimation(peg.x, peg.y, pinRadius, progress, chargeData.targetSymbolId, now);
+        continue; // Don't render normal peg while charging
+      }
+      
+      // Use larger size for revealed pegs in reveal mode
+      const maxSize = (this.revealMode && isRevealed) ? revealMaxSize : baseMaxSize;
       
       // Render symbol if peg has one (level > 0 means it has a symbol)
       if (peg.level > 0) {
@@ -1163,6 +1209,213 @@ export class PlinkoSlotEngine {
   }
   
   /**
+   * Render the charging animation for a peg in reveal mode.
+   * Classic slot machine style - golden, glamorous, lucky casino feel.
+   */
+  private renderChargingAnimation(x: number, y: number, radius: number, progress: number, targetSymbolId: number, now: number): void {
+    const ctx = this.ctx;
+    const targetSymbol = PlinkoSlotEngine.getSymbol(targetSymbolId);
+    const targetColor = targetSymbol?.color || '#FFD700';
+    const scale = PlinkoSlotEngine.SIZE_SCALE;
+    
+    // Parse target color for later blend
+    let targetR = 255, targetG = 215, targetB = 0;
+    if (targetColor.startsWith('#') && targetColor.length >= 7) {
+      targetR = parseInt(targetColor.slice(1, 3), 16) || 255;
+      targetG = parseInt(targetColor.slice(3, 5), 16) || 215;
+      targetB = parseInt(targetColor.slice(5, 7), 16) || 0;
+    }
+    
+    // Casino gold palette - starts golden, transitions to target symbol color
+    const colorProgress = Math.pow(progress, 2);
+    const goldR = Math.round(255 * (1 - colorProgress) + targetR * colorProgress);
+    const goldG = Math.round(200 * (1 - colorProgress) + targetG * colorProgress);
+    const goldB = Math.round(50 * (1 - colorProgress) + targetB * colorProgress);
+    
+    ctx.save();
+    
+    // === Golden outer glow (warm casino ambiance) ===
+    const glowRadius = radius * (2 + Math.sin(now / 250) * 0.2 + progress * 0.8);
+    const outerGlow = ctx.createRadialGradient(x, y, radius * 0.3, x, y, glowRadius);
+    outerGlow.addColorStop(0, `rgba(255, 215, 0, ${0.5 + progress * 0.3})`);
+    outerGlow.addColorStop(0.4, `rgba(255, 180, 0, ${0.25 + progress * 0.15})`);
+    outerGlow.addColorStop(0.7, `rgba(255, 140, 0, 0.1)`);
+    outerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    
+    ctx.fillStyle = outerGlow;
+    ctx.beginPath();
+    ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // === Slot reel blur effect (spinning mystery) ===
+    const blurLayers = 5;
+    const spinSpeed = now / 60;
+    for (let i = 0; i < blurLayers; i++) {
+      const layerProgress = i / blurLayers;
+      const layerRadius = radius * (0.6 + layerProgress * 0.4);
+      const spinOffset = Math.sin(spinSpeed + i * 0.5) * radius * 0.15 * (1 - progress);
+      
+      ctx.globalAlpha = 0.15 * (1 - layerProgress) * (1 - progress * 0.7);
+      ctx.fillStyle = `rgb(${goldR}, ${goldG}, ${goldB})`;
+      ctx.beginPath();
+      ctx.arc(x + spinOffset, y, layerRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // === Shimmering coin-like shine ===
+    const shineAngle = (now / 400) % (Math.PI * 2);
+    const shineX = x + Math.cos(shineAngle) * radius * 0.3;
+    const shineY = y + Math.sin(shineAngle) * radius * 0.3;
+    
+    const shineGradient = ctx.createRadialGradient(shineX, shineY, 0, x, y, radius * 1.2);
+    shineGradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+    shineGradient.addColorStop(0.3, 'rgba(255, 240, 180, 0.4)');
+    shineGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    
+    ctx.globalAlpha = 0.6 + Math.sin(now / 150) * 0.2;
+    ctx.fillStyle = shineGradient;
+    ctx.beginPath();
+    ctx.arc(x, y, radius * 1.2, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // === Central golden disc (like a coin face) ===
+    const discRadius = radius * (0.85 + Math.sin(now / 200) * 0.05);
+    
+    // Disc gradient (3D coin effect)
+    const discGradient = ctx.createRadialGradient(
+      x - discRadius * 0.3, y - discRadius * 0.3, 0,
+      x, y, discRadius
+    );
+    discGradient.addColorStop(0, '#FFF8DC'); // Cornsilk highlight
+    discGradient.addColorStop(0.3, '#FFD700'); // Gold
+    discGradient.addColorStop(0.7, '#DAA520'); // Goldenrod
+    discGradient.addColorStop(1, '#B8860B'); // Dark goldenrod edge
+    
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = discGradient;
+    ctx.beginPath();
+    ctx.arc(x, y, discRadius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Coin edge highlight
+    ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = '#FFF8DC';
+    ctx.lineWidth = 2 * scale;
+    ctx.beginPath();
+    ctx.arc(x, y, discRadius - 1, -0.5, 1);
+    ctx.stroke();
+    
+    // === Question mark or mystery symbol (fades out as progress increases) ===
+    if (progress < 0.85) {
+      ctx.globalAlpha = (0.7 - progress * 0.8) * (0.7 + Math.sin(now / 100) * 0.3);
+      ctx.fillStyle = '#8B4513'; // Saddle brown
+      ctx.font = `bold ${radius * 1.2}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('?', x, y + radius * 0.1);
+    }
+    
+    // === Twinkling stars/sparkles around the peg ===
+    const numStars = 6;
+    for (let i = 0; i < numStars; i++) {
+      const starAngle = (i / numStars) * Math.PI * 2 + now / 600;
+      const starDist = radius * (1.3 + Math.sin(now / 300 + i * 2) * 0.2 + progress * 0.3);
+      const starX = x + Math.cos(starAngle) * starDist;
+      const starY = y + Math.sin(starAngle) * starDist;
+      const twinkle = 0.5 + Math.sin(now / 80 + i * 1.5) * 0.5;
+      
+      // Draw 4-pointed star
+      const starSize = (3 + progress * 2) * scale * twinkle;
+      ctx.globalAlpha = 0.7 * twinkle + progress * 0.3;
+      ctx.fillStyle = '#FFD700';
+      ctx.beginPath();
+      for (let j = 0; j < 4; j++) {
+        const angle = (j / 4) * Math.PI * 2 - Math.PI / 4;
+        const tipX = starX + Math.cos(angle) * starSize;
+        const tipY = starY + Math.sin(angle) * starSize;
+        if (j === 0) ctx.moveTo(tipX, tipY);
+        else ctx.lineTo(tipX, tipY);
+        
+        const midAngle = angle + Math.PI / 4;
+        const midX = starX + Math.cos(midAngle) * starSize * 0.3;
+        const midY = starY + Math.sin(midAngle) * starSize * 0.3;
+        ctx.lineTo(midX, midY);
+      }
+      ctx.closePath();
+      ctx.fill();
+      
+      // White sparkle center
+      ctx.globalAlpha = twinkle;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(starX, starY, starSize * 0.25, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // === Pulsing golden ring (slot machine excitement) ===
+    const ringPulse = Math.sin(now / 120) * 0.5 + 0.5;
+    const ringRadius = radius * (1.1 + ringPulse * 0.15 + progress * 0.2);
+    ctx.globalAlpha = (0.4 + progress * 0.4) * (0.7 + ringPulse * 0.3);
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = (2 + progress * 2) * scale;
+    ctx.beginPath();
+    ctx.arc(x, y, ringRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // === Building anticipation - additional rings as progress increases ===
+    if (progress > 0.3) {
+      const extraRings = Math.floor((progress - 0.3) * 5);
+      for (let i = 0; i < extraRings; i++) {
+        const ringPhase = ((now / 200) + i * 0.25) % 1;
+        const rRadius = radius * (1.2 + ringPhase * 0.8);
+        ctx.globalAlpha = (1 - ringPhase) * 0.3;
+        ctx.strokeStyle = '#FFA500';
+        ctx.lineWidth = 2 * scale;
+        ctx.beginPath();
+        ctx.arc(x, y, rRadius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    
+    // === Final reveal flash (last 15%) - big golden burst ===
+    if (progress > 0.85) {
+      const flashProgress = (progress - 0.85) / 0.15;
+      const easeFlash = 1 - Math.pow(1 - flashProgress, 3);
+      
+      // Golden starburst
+      ctx.globalAlpha = (1 - easeFlash) * 0.8;
+      const burstRadius = radius * (1.5 + easeFlash * 2.5);
+      const burstGradient = ctx.createRadialGradient(x, y, 0, x, y, burstRadius);
+      burstGradient.addColorStop(0, '#ffffff');
+      burstGradient.addColorStop(0.2, '#FFD700');
+      burstGradient.addColorStop(0.6, '#FFA500');
+      burstGradient.addColorStop(1, 'rgba(255, 165, 0, 0)');
+      
+      ctx.fillStyle = burstGradient;
+      ctx.beginPath();
+      ctx.arc(x, y, burstRadius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Radiating lines for starburst effect
+      const numRays = 12;
+      ctx.strokeStyle = '#FFD700';
+      ctx.lineWidth = 2 * scale;
+      ctx.globalAlpha = (1 - easeFlash) * 0.6;
+      for (let i = 0; i < numRays; i++) {
+        const rayAngle = (i / numRays) * Math.PI * 2;
+        const innerR = radius * 0.8;
+        const outerR = radius * (1.5 + easeFlash * 2);
+        ctx.beginPath();
+        ctx.moveTo(x + Math.cos(rayAngle) * innerR, y + Math.sin(rayAngle) * innerR);
+        ctx.lineTo(x + Math.cos(rayAngle) * outerR, y + Math.sin(rayAngle) * outerR);
+        ctx.stroke();
+      }
+    }
+    
+    ctx.restore();
+  }
+  
+  /**
    * Render expanding ring effects on peg hits.
    */
   private renderRingEffects(): void {
@@ -1268,6 +1521,22 @@ export class PlinkoSlotEngine {
   }
   
   /**
+   * Enable or disable reveal mode.
+   * In reveal mode, pegs start empty and "charge up" when first hit,
+   * revealing their symbol after a 2-second animation.
+   */
+  setRevealMode(enabled: boolean): void {
+    this.revealMode = enabled;
+  }
+  
+  /**
+   * Check if reveal mode is enabled.
+   */
+  isRevealModeEnabled(): boolean {
+    return this.revealMode;
+  }
+  
+  /**
    * Get current progressive state (read-only).
    */
   getProgressiveState(): ProgressiveState | null {
@@ -1297,6 +1566,14 @@ export class PlinkoSlotEngine {
     this.progressiveState = null;
     this.lockedPegs.clear();
     this.explosionParticles = [];
+  }
+  
+  /**
+   * Reset reveal mode state.
+   */
+  private resetRevealState(): void {
+    this.chargingPegs.clear();
+    this.revealedPegs.clear();
   }
 
   /**
@@ -1624,8 +1901,37 @@ export class PlinkoSlotEngine {
     // Check if this peg is locked in progressive mode (cannot be changed)
     const isLockedInProgressive = this.progressiveMode && this.lockedPegs.has(pegId);
     
-    // Check if this peg has the bonus symbol (locked - cannot be changed)
-    if (this.bonusPegs.has(pegId) || isLockedInProgressive) {
+    // REVEAL MODE: Special handling
+    if (this.revealMode) {
+      // In reveal mode, pegs only change on first hit, then stay locked
+      const isCharging = this.chargingPegs.has(pegId);
+      const isRevealed = this.revealedPegs.has(pegId);
+      
+      if (!isCharging && !isRevealed && !this.bonusPegs.has(pegId)) {
+        // First hit - start charging animation
+        const canSpawnBonus = !this.isFreeSpinsMode;
+        const spawnBonus = canSpawnBonus && Math.random() < PlinkoSlotEngine.BONUS_SPAWN_CHANCE;
+        
+        let targetSymbolId: number;
+        if (spawnBonus) {
+          targetSymbolId = PlinkoSlotEngine.BONUS_SYMBOL_ID;
+          this.bonusPegs.add(pegId);
+        } else {
+          targetSymbolId = PlinkoSlotEngine.getRandomSymbolId();
+        }
+        
+        // Start charging
+        this.chargingPegs.set(pegId, {
+          startTime: Date.now(),
+          targetSymbolId
+        });
+        
+        this.callbacks.onPegChargeStart?.(pegId);
+      }
+      // Already charging or revealed - do nothing
+    }
+    // NORMAL MODE: Change symbol on every hit
+    else if (this.bonusPegs.has(pegId) || isLockedInProgressive) {
       // Locked pegs - no ring effect, symbol doesn't change
     } else {
       // Check for bonus symbol spawn (1 in 200 chance, but not during free spins)
@@ -1650,6 +1956,9 @@ export class PlinkoSlotEngine {
       // Add ring effect only when symbol changes (unlocked pegs)
       const symbolColor = PlinkoSlotEngine.getSymbolColor(peg.level);
       this.addRingEffect(peg.x, peg.y, symbolColor);
+      
+      // Notify that a symbol changed (for sound effects)
+      this.callbacks.onSymbolChanged?.(pegId, peg.level);
     }
     
     // Record in ball's hit list
@@ -2296,6 +2605,9 @@ export class PlinkoSlotEngine {
     
     // Clear progressive state
     this.resetProgressiveState();
+    
+    // Clear reveal mode state
+    this.resetRevealState();
   }
 
   /**
