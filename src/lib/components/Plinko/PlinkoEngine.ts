@@ -91,9 +91,9 @@ class PlinkoEngine {
 
   private static PIN_CATEGORY = 0x0001;
   private static BALL_CATEGORY = 0x0002;
-  private static PEG_RIPPLE_DURATION_MS = 260;
-  private static PEG_RIPPLE_MAX_SCALE = 1.25;
-  private static PEG_RIPPLE_ALPHA = 0.35;
+  private static PEG_RIPPLE_DURATION_MS = 400;
+  private static PEG_RIPPLE_MAX_SCALE = 1.9;
+  private static PEG_RIPPLE_ALPHA = 0.45;
 
   /**
    * Friction parameters to be applied to the ball body.
@@ -270,7 +270,7 @@ class PlinkoEngine {
    * Gets the pin radius based on the current row count.
    */
   private get pinRadius(): number {
-    return (24 - this.rowCount) / 2;
+    return ((24 - this.rowCount) / 2) * 1.2;
   }
 
   /**
@@ -444,7 +444,7 @@ class PlinkoEngine {
 
     context.save();
     context.strokeStyle = '#ffffff';
-    context.lineWidth = Math.max(1, this.pinRadius * 0.15);
+    context.lineWidth = Math.max(1.25, this.pinRadius * 0.35);
 
     for (const ripple of this.pegRipples) {
       const elapsed = now - ripple.startTime;

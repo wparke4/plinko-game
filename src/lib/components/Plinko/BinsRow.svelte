@@ -118,7 +118,7 @@
       return false;
     }
 
-    return numericValue < 10;
+    return numericValue < 10 || numericValue === 26;
   }
 
   function getBinStyle(binIndex: number): string {
