@@ -189,7 +189,7 @@
   <!-- Right side: Game Area -->
   <div class="relative flex-1 flex flex-col bg-[#00212F]">
     <!-- Header bar with Bet Amount and Balance - centered above game board -->
-    <div class="flex items-center justify-center gap-10 py-4 px-6 bg-[#142E37]">
+    <div class="flex items-center justify-center gap-10 py-4 px-6 bg-[#213845]">
       <!-- Bet Amount Container -->
       <div class="flex flex-col gap-0.5">
         <label class="text-sm font-medium text-[#9BB3C3] tracking-tight">

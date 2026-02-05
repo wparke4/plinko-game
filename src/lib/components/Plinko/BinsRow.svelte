@@ -105,6 +105,22 @@
     return formatLargeNumber(adjustedPayout);
   }
 
+  function shouldShowMultiplierX(displayValue: string): boolean {
+    if (displayValue === '💀') {
+      return false;
+    }
+    if (displayValue.toLowerCase().includes('k')) {
+      return false;
+    }
+
+    const numericValue = Number(displayValue);
+    if (!Number.isFinite(numericValue)) {
+      return false;
+    }
+
+    return numericValue < 10;
+  }
+
   function getBinStyle(binIndex: number): string {
     if ($zeroedBins.has(binIndex)) {
       return 'background-color: rgb(0, 0, 0); color: rgb(255, 255, 255); --shadow-color: rgb(32, 32, 32);';
@@ -118,6 +134,7 @@
   {#if $plinkoEngine}
     <div class="flex gap-[1%]" style:width={`${($plinkoEngine.binsWidthPercentage ?? 0) * 100}%`}>
       {#each $adjustedMultipliers as payout, binIndex}
+        {@const displayValue = getBinDisplayValue(binIndex)}
         <!-- Font-size clamping:
               - Mobile (< 1024px): From 5px at 370px viewport width to 7px at 600px viewport width
               - Desktop (>= 1024px): From 9px at 1024px viewport width to 11px at 1100px viewport width
@@ -136,7 +153,10 @@
           class="flex min-w-0 flex-1 cursor-pointer items-center justify-center rounded-xs text-[clamp(5px,2.784px+0.87vw,7px)] font-bold text-gray-950 shadow-[0_2px_var(--shadow-color)] transition-all hover:opacity-80 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 lg:rounded-md lg:text-[clamp(9px,-16.944px+2.632vw,11px)] lg:shadow-[0_3px_var(--shadow-color)]"
           style={getBinStyle(binIndex)}
         >
-          {getBinDisplayValue(binIndex)}
+          <span>{displayValue}</span>
+          {#if shouldShowMultiplierX(displayValue)}
+            <span class="ml-[1px] text-[0.75em] leading-none">x</span>
+          {/if}
         </div>
       {/each}
     </div>

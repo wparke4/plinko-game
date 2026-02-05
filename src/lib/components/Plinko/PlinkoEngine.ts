@@ -21,6 +21,13 @@ type BallFrictionsByRowCount = {
   frictionAirByRowCount: Record<RowCount, NonNullable<IBodyDefinition['frictionAir']>>;
 };
 
+type PegRipple = {
+  x: number;
+  y: number;
+  startTime: number;
+  radius: number;
+};
+
 /**
  * Engine for rendering the Plinko game using [matter-js](https://brm.io/matter-js/).
  *
@@ -50,6 +57,8 @@ class PlinkoEngine {
   private runner: Matter.Runner;
   private activeBalls: Map<Matter.Body, number> = new Map();
   private trackedBall: Matter.Body | null = null;
+  private pinSet: Set<Matter.Body> = new Set();
+  private pegRipples: PegRipple[] = [];
 
   /**
    * Every pin of the game.
@@ -82,6 +91,9 @@ class PlinkoEngine {
 
   private static PIN_CATEGORY = 0x0001;
   private static BALL_CATEGORY = 0x0002;
+  private static PEG_RIPPLE_DURATION_MS = 260;
+  private static PEG_RIPPLE_MAX_SCALE = 1.25;
+  private static PEG_RIPPLE_ALPHA = 0.35;
 
   /**
    * Friction parameters to be applied to the ball body.
@@ -141,6 +153,9 @@ class PlinkoEngine {
         wireframes: false,
       },
     });
+    Matter.Events.on(this.render, 'afterRender', () => {
+      this.drawPegRipples();
+    });
     this.runner = Matter.Runner.create({
       delta: 1000 / 60, // Fixed 60 FPS timing - 16.666ms per frame
       isFixed: true
@@ -164,6 +179,14 @@ class PlinkoEngine {
     Matter.Composite.add(this.engine.world, [this.sensor]);
     Matter.Events.on(this.engine, 'collisionStart', ({ pairs }) => {
       pairs.forEach(({ bodyA, bodyB }) => {
+        const pin = this.pinSet.has(bodyA) ? bodyA : this.pinSet.has(bodyB) ? bodyB : null;
+        if (pin) {
+          const otherBody = pin === bodyA ? bodyB : bodyA;
+          if (otherBody.collisionFilter.category === PlinkoEngine.BALL_CATEGORY) {
+            this.addPegRipple(pin);
+          }
+        }
+
         if (bodyA === this.sensor) {
           this.handleBallEnterBin(bodyB);
         } else if (bodyB === this.sensor) {
@@ -327,6 +350,8 @@ class PlinkoEngine {
       Matter.Composite.remove(this.engine.world, this.pins);
       this.pins = [];
     }
+    this.pinSet.clear();
+    this.pegRipples = [];
     if (this.pinsLastRowXCoords.length > 0) {
       this.pinsLastRowXCoords = [];
     }
@@ -356,6 +381,7 @@ class PlinkoEngine {
           },
         });
         this.pins.push(pin);
+        this.pinSet.add(pin);
 
         if (row === this.rowCount - 1) {
           this.pinsLastRowXCoords.push(colX);
@@ -396,6 +422,52 @@ class PlinkoEngine {
     );
     this.walls.push(leftWall, rightWall);
     Matter.Composite.add(this.engine.world, this.walls);
+  }
+
+  private addPegRipple(pin: Matter.Body) {
+    this.pegRipples.push({
+      x: pin.position.x,
+      y: pin.position.y,
+      startTime: performance.now(),
+      radius: this.pinRadius,
+    });
+  }
+
+  private drawPegRipples() {
+    if (this.pegRipples.length === 0) {
+      return;
+    }
+
+    const now = performance.now();
+    const context = this.render.context;
+    const nextRipples: PegRipple[] = [];
+
+    context.save();
+    context.strokeStyle = '#ffffff';
+    context.lineWidth = Math.max(1, this.pinRadius * 0.15);
+
+    for (const ripple of this.pegRipples) {
+      const elapsed = now - ripple.startTime;
+      if (elapsed >= PlinkoEngine.PEG_RIPPLE_DURATION_MS) {
+        continue;
+      }
+
+      const progress = elapsed / PlinkoEngine.PEG_RIPPLE_DURATION_MS;
+      const radius =
+        ripple.radius +
+        ripple.radius * (PlinkoEngine.PEG_RIPPLE_MAX_SCALE - 1) * progress;
+      const alpha = PlinkoEngine.PEG_RIPPLE_ALPHA * (1 - progress);
+
+      context.globalAlpha = alpha;
+      context.beginPath();
+      context.arc(ripple.x, ripple.y, radius, 0, Math.PI * 2);
+      context.stroke();
+
+      nextRipples.push(ripple);
+    }
+
+    context.restore();
+    this.pegRipples = nextRipples;
   }
 
   private removeAllBalls() {
