@@ -8,6 +8,7 @@ import {
   totalProfitHistory,
   zeroedBins,
   currentMultipliersByPosition,
+  bucketOrder,
 } from '$lib/stores/plinkoSwap';
 import type { RiskLevel, RowCount } from '$lib/types';
 import { getRandomBetween } from '$lib/utils/numbers';
@@ -296,6 +297,8 @@ class PlinkoEngine {
     const binIndex = this.pinsLastRowXCoords.findLastIndex((pinX) => pinX < ball.position.x);
     if (binIndex !== -1 && binIndex < this.pinsLastRowXCoords.length - 1) {
       const betAmount = get(betAmountOfExistingBalls)[ball.id] ?? 0;
+      const orderAtHit = get(bucketOrder);
+      const bucketIndex = orderAtHit[binIndex];
       const multiplier = get(currentMultipliersByPosition)[binIndex];
       const payoutValue = betAmount * multiplier;
       const profit = payoutValue - betAmount;
@@ -308,6 +311,7 @@ class PlinkoEngine {
           rowCount: this.rowCount,
           riskLevel: this.riskLevel,
           binIndex,
+          bucketIndex,
           payout: {
             multiplier,
             value: payoutValue,

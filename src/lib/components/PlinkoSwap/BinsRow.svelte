@@ -100,7 +100,7 @@
     await tick();
 
     const animations: Animation[] = [];
-    const dropDistance = 18;
+    const dropDistance = 28;
     const minShift = 0.5;
 
     nextOrder.forEach((bucketIndex) => {
@@ -119,15 +119,16 @@
 
       const animation = node.animate(
         [
-          { transform: `translate(${deltaX}px, 0px) scale(1)` },
-          { transform: `translate(${deltaX}px, ${dropDistance}px) scale(0.98)` },
-          { transform: `translate(0px, ${dropDistance}px) scale(1)` },
-          { transform: 'translate(0px, -2px) scale(1.04)' },
-          { transform: 'translate(0px, 0px) scale(1)' },
+          { transform: `translate(${deltaX}px, 0px) scale(1)`, offset: 0 },
+          { transform: `translate(${deltaX}px, ${dropDistance}px) scale(0.96)`, offset: 0.3 },
+          { transform: `translate(${deltaX}px, ${dropDistance}px) scale(0.96)`, offset: 0.45 },
+          { transform: `translate(0px, ${dropDistance}px) scale(1)`, offset: 0.7 },
+          { transform: 'translate(0px, -4px) scale(1.06)', offset: 0.86 },
+          { transform: 'translate(0px, 0px) scale(1)', offset: 1 },
         ],
         {
-          duration: 550,
-          easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+          duration: 950,
+          easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
         },
       );
 
