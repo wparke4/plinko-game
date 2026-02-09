@@ -115,7 +115,7 @@
     });
 
     if (binsRowRef) {
-      await binsRowRef.animateSwap(nextOrder);
+      void binsRowRef.animateSwap(nextOrder);
     } else {
       bucketOrder.set(nextOrder);
     }
