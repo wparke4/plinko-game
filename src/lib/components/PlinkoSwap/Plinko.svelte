@@ -7,6 +7,7 @@
     adjustedMultipliers,
     bucketOrder,
     betAmount as betAmountStore,
+    betAmountOfExistingBalls,
     zeroedBins,
     rowCount,
   } from '$lib/stores/plinkoSwap';
@@ -34,7 +35,7 @@
   // Betting UI state
   let betAmount = $state(100);
   let numberOfBalls = $state(1);
-  let isDropping = $state(false);
+  let isDropping = $derived(Object.keys($betAmountOfExistingBalls).length > 0);
 
   let binsRowRef: BinsRowComponent | null = $state(null);
 
@@ -91,8 +92,6 @@
     // Deduct the bet amount
     balance -= totalBet;
 
-    isDropping = true;
-
     // Sync bet amount for the engine payout records
     betAmountStore.set(betAmount);
 
@@ -126,11 +125,9 @@
 
       // Add delay between balls (except after the last one)
       if (i < ballCount - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 30));
+        await new Promise((resolve) => setTimeout(resolve, 200));
       }
     }
-
-    isDropping = false;
   }
 
   function incrementBalls() {
